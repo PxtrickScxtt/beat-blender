@@ -4,6 +4,8 @@ const { execFile, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+let ytdl; try { ytdl = require('@distube/ytdl-core'); } catch(e) { ytdl = null; console.warn('[YTDL] @distube/ytdl-core no disponible:', e.message); }
+
 
 const app = express();
 const PORT = 3001;
@@ -127,6 +129,26 @@ app.get('/api/audio/:videoId', async (req, res) => {
       onDone(null, path.join(tmpDir, files[0]));
     });
   };
+
+  // === ESTRATEGIA 0: @distube/ytdl-core (sin PO token, sin yt-dlp) ===
+  if (ytdl && ytdl.validateID(videoId)) {
+    try {
+      console.log(`[YTDL] Intentando @distube/ytdl-core...`);
+      const info = await ytdl.getInfo(ytUrl);
+      const audioFormat = ytdl.chooseFormat(info.formats, { quality: 'highestaudio', filter: 'audioonly' })
+        || ytdl.chooseFormat(info.formats, { quality: 'highest' });
+      if (audioFormat) {
+        console.log(`[YTDL] Formato: ${audioFormat.mimeType} ${audioFormat.audioBitrate}kbps`);
+        res.setHeader('Content-Type', audioFormat.mimeType?.split(';')[0] || 'audio/mp4');
+        if (audioFormat.contentLength) res.setHeader('Content-Length', audioFormat.contentLength);
+        res.setHeader('Content-Disposition', `attachment; filename="${videoId}.m4a"`);
+        ytdl(ytUrl, { format: audioFormat }).pipe(res);
+        return;
+      }
+    } catch (ytdlErr) {
+      console.warn(`[YTDL] Fallo: ${ytdlErr.message}. Probando cobalt...`);
+    }
+  }
 
   // === ESTRATEGIA 1: cobalt.tools ===
   try {
