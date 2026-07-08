@@ -74,15 +74,15 @@ function getYtdlpBaseArgs() {
 }
 
 /**
- * Intenta descargar via cobalt.tools API (bypass de bot detection de YouTube)
+ * Intenta descargar via cobalt.tools API usando una de las instancias publicas
  */
-async function downloadViaCobalt(videoId) {
+async function downloadViaCobalt(videoId, apiHost = 'rue-cobalt.xenon.zone') {
   const https = require('https');
   const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
   const body = JSON.stringify({ url: youtubeUrl, downloadMode: 'audio', audioFormat: 'best' });
   return new Promise((resolve, reject) => {
     const req = https.request({
-      hostname: 'api.cobalt.tools',
+      hostname: apiHost,
       path: '/',
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'BeatBlender/1.0', 'Content-Length': Buffer.byteLength(body) }
@@ -93,12 +93,12 @@ async function downloadViaCobalt(videoId) {
         try {
           const json = JSON.parse(data);
           if (json.url) resolve(json.url);
-          else reject(new Error(`Cobalt: ${json.error?.code || JSON.stringify(json)}`));
-        } catch(e) { reject(new Error('Cobalt: respuesta invalida')); }
+          else reject(new Error(`Cobalt [${apiHost}]: ${json.error?.code || JSON.stringify(json)}`));
+        } catch(e) { reject(new Error(`Cobalt [${apiHost}]: respuesta invalida`)); }
       });
     });
     req.on('error', reject);
-    req.setTimeout(15000, () => { req.destroy(); reject(new Error('Cobalt: timeout')); });
+    req.setTimeout(12000, () => { req.destroy(); reject(new Error(`Cobalt [${apiHost}]: timeout`)); });
     req.write(body);
     req.end();
   });
@@ -150,40 +150,46 @@ app.get('/api/audio/:videoId', async (req, res) => {
     }
   }
 
-  // === ESTRATEGIA 1: cobalt.tools ===
-  try {
-    console.log(`[COBALT] Intentando cobalt.tools...`);
-    const cobaltUrl = await downloadViaCobalt(videoId);
-    console.log(`[COBALT] URL obtenida, haciendo stream...`);
-    const https2 = require('https');
-    const http2 = require('http');
-    const client = cobaltUrl.startsWith('https') ? https2 : http2;
-    client.get(cobaltUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (audioRes) => {
-      if (audioRes.statusCode !== 200) {
-        console.warn(`[COBALT] Stream status ${audioRes.statusCode}, usando yt-dlp...`);
-        if (!res.headersSent) {
-          doYtdlp((err, filePath) => {
-            if (err || !filePath) return res.status(500).json({ error: 'No se pudo descargar el audio.' });
-            const stat = fs.statSync(filePath);
-            res.setHeader('Content-Type', 'audio/mp4'); res.setHeader('Content-Length', stat.size);
-            const s = fs.createReadStream(filePath); s.pipe(res);
-            s.on('end', () => { try { fs.unlinkSync(filePath); } catch(e){} });
-          });
-        }
-        return;
-      }
-      console.log(`[COBALT] Stream OK`);
-      res.setHeader('Content-Type', audioRes.headers['content-type'] || 'audio/mp4');
-      if (audioRes.headers['content-length']) res.setHeader('Content-Length', audioRes.headers['content-length']);
-      res.setHeader('Content-Disposition', `attachment; filename="${videoId}.m4a"`);
-      audioRes.pipe(res);
-    }).on('error', (err) => {
-      console.error(`[COBALT] Stream error:`, err.message);
-      if (!res.headersSent) res.status(500).json({ error: 'Error descargando audio.' });
-    });
-    return;
-  } catch (cobaltErr) {
-    console.warn(`[COBALT] Fallo: ${cobaltErr.message}. Usando yt-dlp...`);
+  // === ESTRATEGIA 1: cobalt.tools (Instancias Públicas Rotativas) ===
+  const cobaltHosts = [
+    'rue-cobalt.xenon.zone',
+    'dog.kittycat.boo',
+    'cobaltapi.kittycat.boo',
+    'cobaltapi.cjs.nz'
+  ];
+
+  for (const host of cobaltHosts) {
+    try {
+      console.log(`[COBALT] Intentando con instancia: ${host}...`);
+      const cobaltUrl = await downloadViaCobalt(videoId, host);
+      console.log(`[COBALT] URL obtenida desde ${host}, haciendo stream...`);
+      const https2 = require('https');
+      const http2 = require('http');
+      const client = cobaltUrl.startsWith('https') ? https2 : http2;
+      
+      const success = await new Promise((resolveStream) => {
+        client.get(cobaltUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (audioRes) => {
+          if (audioRes.statusCode !== 200) {
+            console.warn(`[COBALT] Stream desde ${host} devolvió status ${audioRes.statusCode}`);
+            resolveStream(false);
+            return;
+          }
+          console.log(`[COBALT] Stream exitoso desde ${host}`);
+          res.setHeader('Content-Type', audioRes.headers['content-type'] || 'audio/mp4');
+          if (audioRes.headers['content-length']) res.setHeader('Content-Length', audioRes.headers['content-length']);
+          res.setHeader('Content-Disposition', `attachment; filename="${videoId}.m4a"`);
+          audioRes.pipe(res);
+          resolveStream(true);
+        }).on('error', (err) => {
+          console.error(`[COBALT] Error de stream en ${host}:`, err.message);
+          resolveStream(false);
+        });
+      });
+
+      if (success) return; // Terminado con éxito
+    } catch (cobaltErr) {
+      console.warn(`[COBALT] Instancia ${host} falló: ${cobaltErr.message}`);
+    }
   }
 
   // === ESTRATEGIA 2: yt-dlp ===
