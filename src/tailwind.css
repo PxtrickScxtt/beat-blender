@@ -1,0 +1,43 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Orbitron:wght@400;600;800;900&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', sans-serif;
+  --font-mono: 'Orbitron', monospace;
+
+  /* Colores personalizados del mezclador DJ */
+  --color-dj-dark: #070a13;
+  --color-dj-card: rgba(15, 23, 42, 0.65);
+  --color-dj-border: rgba(51, 65, 85, 0.4);
+  --color-dj-neon-purple: #8b5cf6;
+  --color-dj-neon-cyan: #06b6d4;
+  --color-dj-neon-pink: #ec4899;
+  --color-dj-neon-green: #10b981;
+}
+
+/* Estilos globales para dar un look premium */
+body {
+  background-color: var(--color-dj-dark);
+  color: #f1f5f9;
+  font-family: var(--font-sans);
+  min-height: 100vh;
+  margin: 0;
+  overflow-x: hidden;
+}
+
+/* Barra de desplazamiento personalizada estilo DJ */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-dj-neon-purple);
+}

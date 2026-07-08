@@ -1,0 +1,147 @@
+<div class="min-h-screen bg-dj-dark bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-950 via-slate-900 to-dj-dark text-slate-100 flex flex-col font-sans">
+  
+  <!-- CABECERA PRINCIPAL -->
+  <header class="border-b border-dj-border bg-slate-950/80 backdrop-blur-md sticky top-0 z-40 px-6 py-4 flex items-center justify-between shadow-lg">
+    <div class="flex items-center space-x-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-dj-neon-purple via-dj-neon-pink to-dj-neon-cyan flex items-center justify-center shadow-[0_0_15px_rgba(139,92,246,0.5)] animate-pulse">
+        <!-- SVG Logo: DJ Headphones -->
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 text-white">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2Zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2ZM9 10l12-3" />
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-xl font-black tracking-widest bg-gradient-to-r from-dj-neon-purple via-dj-neon-pink to-dj-neon-cyan bg-clip-text text-transparent font-mono">
+          BEATBLENDER
+        </h1>
+        <p class="text-[10px] text-slate-400 font-mono tracking-wider">HYBRID DJ MIXING CONSOLE</p>
+      </div>
+    </div>
+
+    <!-- Indicador de Estado y Controles Rápidos -->
+    <div class="flex items-center space-x-4">
+      <div class="flex items-center space-x-2 bg-slate-900/80 border border-slate-700/50 rounded-full px-3 py-1.5 text-xs">
+        <span class="relative flex h-2 w-2">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" [ngClass]="mixer.isPlaying() ? 'bg-dj-neon-green' : 'bg-amber-500'"></span>
+          <span class="relative inline-flex rounded-full h-2 w-2" [ngClass]="mixer.isPlaying() ? 'bg-dj-neon-green' : 'bg-amber-500'"></span>
+        </span>
+        <span class="font-mono text-slate-300">
+          {{ mixer.isPlaying() ? 'LIVE MIXING' : 'READY TO MIX' }}
+        </span>
+      </div>
+
+      <!-- Botón para ver pantallas de video -->
+      <button 
+        (click)="toggleVideoMonitor()" 
+        class="flex items-center space-x-1.5 px-4 py-1.5 rounded-full text-xs font-semibold border transition-all duration-300 cursor-pointer"
+        [ngClass]="showVideoMonitor() 
+          ? 'bg-dj-neon-cyan/20 border-dj-neon-cyan/50 text-dj-neon-cyan shadow-[0_0_10px_rgba(6,182,212,0.25)]' 
+          : 'bg-slate-900/80 border-slate-700/50 text-slate-300 hover:border-slate-500'"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 0 3.75 6v12A2.25 2.25 0 0 0 6 20.25Z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="m10.5 13.5 3-3m0 0h-3m3 0v3M8.25 9.75h.008v.008H8.25V9.75Zm.008 4.5H8.25v.008h.008v-.008Zm1.118-2.25H9.38v.008h.008v-.008Zm3.366-2.25h-.008v.008h.008V9.75Zm-.008 4.5H12.75v.008h.008v-.008Zm1.118-2.25h-.008v.008h.008v-.008ZM15.75 9.75h.008v.008H15.75V9.75Zm.008 4.5H15.75v.008h.008v-.008Z" />
+        </svg>
+        <span>MONITOR VJ</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- CONTENIDO PRINCIPAL -->
+  <main class="flex-1 p-6 lg:p-8 max-w-7xl mx-auto w-full flex flex-col gap-6 lg:gap-8">
+    
+    <!-- CONTENEDORES DE VIDEO DE YOUTUBE (Ocultos o Visibles según VJ Monitor) -->
+    <!-- Se mantienen siempre en el DOM pero se ocultan visualmente cuando showVideoMonitor es falso -->
+    <div 
+      class="transition-all duration-500 overflow-hidden"
+      [ngClass]="showVideoMonitor() ? 'max-h-[300px] opacity-100 mb-2' : 'max-h-0 opacity-0 pointer-events-none absolute -top-9999 left-0'"
+    >
+      <div class="grid grid-cols-2 gap-4 bg-slate-950/60 p-4 border border-dj-border rounded-2xl backdrop-blur-md">
+        <!-- Deck A Monitor -->
+        <div class="relative aspect-video bg-black rounded-lg overflow-hidden border border-slate-800">
+          <div id="yt-player-a" class="w-full h-full"></div>
+          
+          <!-- Thumbnail Overlay to hide random YouTube recommendations -->
+          @let trackA_video = (mixer.activePlayer() === 'A') ? mixer.currentTrack() : mixer.nextTrack();
+          @if (trackA_video) {
+            <img [src]="trackA_video.thumbnail" class="absolute inset-0 w-full h-full object-cover z-10 opacity-90 pointer-events-none">
+            <div class="absolute inset-0 bg-black/40 z-10 pointer-events-none"></div>
+          }
+
+          <!-- Overlay de Estado -->
+          <div class="absolute top-2 left-2 z-20 bg-black/75 px-2 py-0.5 rounded text-[10px] font-mono text-dj-neon-purple border border-dj-neon-purple/30 flex items-center space-x-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-dj-neon-purple" [ngClass]="{'animate-ping': mixer.activePlayer() === 'A' && mixer.isPlaying()}"></span>
+            <span>DECK A</span>
+          </div>
+          <!-- Si no hay pista cargada -->
+          @if (!mixer.queue().length) {
+            <div class="absolute inset-0 z-20 flex items-center justify-center bg-slate-950 text-slate-500 text-xs font-mono">
+              ESPERANDO PISTA...
+            </div>
+          }
+        </div>
+
+        <!-- Deck B Monitor -->
+        <div class="relative aspect-video bg-black rounded-lg overflow-hidden border border-slate-800">
+          <div id="yt-player-b" class="w-full h-full"></div>
+          
+          <!-- Thumbnail Overlay to hide random YouTube recommendations -->
+          @let trackB_video = (mixer.activePlayer() === 'B') ? mixer.currentTrack() : mixer.nextTrack();
+          @if (trackB_video) {
+            <img [src]="trackB_video.thumbnail" class="absolute inset-0 w-full h-full object-cover z-10 opacity-90 pointer-events-none">
+            <div class="absolute inset-0 bg-black/40 z-10 pointer-events-none"></div>
+          }
+
+          <!-- Overlay de Estado -->
+          <div class="absolute top-2 left-2 z-20 bg-black/75 px-2 py-0.5 rounded text-[10px] font-mono text-dj-neon-cyan border border-dj-neon-cyan/30 flex items-center space-x-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-dj-neon-cyan" [ngClass]="{'animate-ping': mixer.activePlayer() === 'B' && mixer.isPlaying()}"></span>
+            <span>DECK B</span>
+          </div>
+          <!-- Si no hay pista cargada -->
+          @if (!mixer.queue().length) {
+            <div class="absolute inset-0 z-20 flex items-center justify-center bg-slate-950 text-slate-500 text-xs font-mono">
+              ESPERANDO PISTA...
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+
+    <!-- PANEL CENTRAL: MEZCLADOR Y COLA -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
+      
+      <!-- COLUMNA IZQUIERDA: CONSOLA DE DJ (7 de 12 columnas) -->
+      <section class="lg:col-span-7 flex flex-col gap-6">
+        <app-mix-deck></app-mix-deck>
+      </section>
+
+      <!-- COLUMNA DERECHA: COLA DE MEZCLA (5 de 12 columnas) -->
+      <section class="lg:col-span-5 flex flex-col gap-6">
+        <app-track-queue (onAddClick)="openSearchModal()"></app-track-queue>
+      </section>
+      
+    </div>
+  </main>
+
+  <!-- MODAL BUSCADOR DE CANCIONES -->
+  @if (showSearchModal()) {
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <!-- Backdrop -->
+      <div (click)="closeSearchModal()" class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity"></div>
+      
+      <!-- Contenedor del Modal -->
+      <div class="relative bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.8)] z-10 flex flex-col">
+        <div class="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/40">
+          <h3 class="text-sm font-bold tracking-wider font-mono text-slate-200">AÑADIR PISTA AL SETLIST</h3>
+          <button (click)="closeSearchModal()" class="text-slate-400 hover:text-white transition-colors cursor-pointer">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div class="flex-1 overflow-y-auto">
+          <app-track-search (onTrackAdded)="closeSearchModal()"></app-track-search>
+        </div>
+      </div>
+    </div>
+  }
+</div>
