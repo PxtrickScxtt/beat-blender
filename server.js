@@ -55,14 +55,33 @@ function getCookiesFile() {
   return cookiesFilePath;
 }
 
+const PROXIES = [
+  'http://etfaviqo:t5fqvjbx1r0k@31.59.20.176:6754',
+  'http://etfaviqo:t5fqvjbx1r0k@31.56.127.193:7684',
+  'http://etfaviqo:t5fqvjbx1r0k@45.38.107.97:6014',
+  'http://etfaviqo:t5fqvjbx1r0k@198.105.121.200:6462',
+  'http://etfaviqo:t5fqvjbx1r0k@64.137.96.74:6641',
+  'http://etfaviqo:t5fqvjbx1r0k@198.23.243.226:6361',
+  'http://etfaviqo:t5fqvjbx1r0k@38.154.185.97:6370',
+  'http://etfaviqo:t5fqvjbx1r0k@84.247.60.125:6095',
+  'http://etfaviqo:t5fqvjbx1r0k@142.111.67.146:5611',
+  'http://etfaviqo:t5fqvjbx1r0k@191.96.254.138:6185'
+];
+
+function getRandomProxy() {
+  return PROXIES[Math.floor(Math.random() * PROXIES.length)];
+}
+
 /**
  * Devuelve los argumentos base para yt-dlp incluyendo cookies si están disponibles
  */
 function getYtdlpBaseArgs() {
+  const proxy = getRandomProxy();
   const args = [
     '--no-warnings',
     '--no-check-certificates',
     '--geo-bypass',
+    '--proxy', proxy,
     // web_creator no requiere PO token y funciona desde IPs de servidores cloud
     '--extractor-args', 'youtube:player_client=web_creator',
   ];
