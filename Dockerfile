@@ -1,10 +1,9 @@
 FROM node:20-bookworm
 
-# Instalar Python, FFmpeg y dependencias necesarias para yt-dlp
+# Instalar Python, FFmpeg y yt-dlp via pip (siempre la ultima version)
 RUN apt-get update && \
     apt-get install -y python3 python3-pip ffmpeg curl && \
-    curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && \
-    chmod a+rx /usr/local/bin/yt-dlp
+    pip3 install -U yt-dlp --break-system-packages
 
 # Establecer el directorio de trabajo
 WORKDIR /app
@@ -21,5 +20,5 @@ COPY server.js ./
 # Exponer el puerto
 EXPOSE 3001
 
-# Iniciar el proxy
-CMD ["node", "server.js"]
+# Actualizar yt-dlp al arrancar y luego iniciar el servidor
+CMD sh -c "pip3 install -U yt-dlp --break-system-packages --quiet && node server.js"
