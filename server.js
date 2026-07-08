@@ -72,86 +72,112 @@ function getYtdlpBaseArgs() {
 }
 
 /**
+ * Intenta descargar via cobalt.tools API (bypass de bot detection de YouTube)
+ */
+async function downloadViaCobalt(videoId) {
+  const https = require('https');
+  const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  const body = JSON.stringify({ url: youtubeUrl, downloadMode: 'audio', audioFormat: 'best' });
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: 'api.cobalt.tools',
+      path: '/',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'BeatBlender/1.0', 'Content-Length': Buffer.byteLength(body) }
+    }, (res2) => {
+      let data = '';
+      res2.on('data', chunk => data += chunk);
+      res2.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          if (json.url) resolve(json.url);
+          else reject(new Error(`Cobalt: ${json.error?.code || JSON.stringify(json)}`));
+        } catch(e) { reject(new Error('Cobalt: respuesta invalida')); }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(15000, () => { req.destroy(); reject(new Error('Cobalt: timeout')); });
+    req.write(body);
+    req.end();
+  });
+}
+
+/**
  * Endpoint: GET /api/audio/:videoId
- * Descarga el audio real de YouTube usando yt-dlp y lo envía al cliente.
+ * Descarga el audio real de YouTube: primero cobalt.tools, luego yt-dlp.
  */
 app.get('/api/audio/:videoId', async (req, res) => {
   const { videoId } = req.params;
+  if (!videoId || videoId.length < 5) return res.status(400).json({ error: 'Video ID invalido.' });
 
-  if (!videoId || videoId.length < 5) {
-    return res.status(400).json({ error: 'Video ID inválido.' });
-  }
-
-  const url = `https://www.youtube.com/watch?v=${videoId}`;
+  const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
   const tmpDir = os.tmpdir();
   const filePrefix = `beatblender-${videoId}-${Date.now()}`;
   const outputFile = path.join(tmpDir, `${filePrefix}.%(ext)s`);
 
-  console.log(`[DESCARGA] Iniciando descarga de audio: ${videoId}`);
+  console.log(`[DESCARGA] Iniciando: ${videoId}`);
 
-  try {
-    // Descargar audio usando yt-dlp a un archivo temporal
-    await new Promise((resolve, reject) => {
-      const args = [
-        '--no-playlist',
-        ...getYtdlpBaseArgs(),
-        '-o', outputFile,
-        url
-      ];
-
-      console.log(`[yt-dlp] Ejecutando: yt-dlp ${args.join(' ')}`);
-
-      const proc = execFile(YT_DLP, args, { 
-        timeout: 120000, // 2 minutos máximo
-        maxBuffer: 1024 * 1024 * 50 // 50MB buffer
-      }, (error, stdout, stderr) => {
-        if (error) {
-          console.error(`[yt-dlp] Error:`, error.message);
-          if (stderr) console.error(`[yt-dlp] stderr:`, stderr);
-          reject(error);
-        } else {
-          console.log(`[yt-dlp] Descarga completada: ${stdout.trim()}`);
-          resolve(stdout);
-        }
-      });
+  const doYtdlp = (onDone) => {
+    const args = ['--no-playlist', ...getYtdlpBaseArgs(), '-o', outputFile, ytUrl];
+    console.log(`[yt-dlp] Ejecutando: yt-dlp ${args.join(' ')}`);
+    execFile(YT_DLP, args, { timeout: 120000, maxBuffer: 1024 * 1024 * 50 }, (error) => {
+      if (error) { onDone(error, null); return; }
+      const files = fs.readdirSync(tmpDir).filter(f => f.startsWith(filePrefix));
+      if (files.length === 0) { onDone(new Error('Archivo no encontrado'), null); return; }
+      onDone(null, path.join(tmpDir, files[0]));
     });
+  };
 
-    // Verificar que el archivo existe y tiene contenido
-    let found = null;
-    const files = fs.readdirSync(tmpDir).filter(f => f.startsWith(filePrefix));
-    if (files.length > 0) {
-      found = path.join(tmpDir, files[0]);
-    }
-    
-    if (!found || !fs.existsSync(found)) {
-      return res.status(500).json({ error: 'No se encontró el archivo de audio descargado.' });
-    }
-    
-    // Usar el archivo encontrado
-      const stat = fs.statSync(found);
-      console.log(`[DESCARGA] Archivo encontrado: ${found} (${(stat.size / 1024 / 1024).toFixed(2)} MB)`);
-      
-      res.setHeader('Content-Type', 'audio/mp4');
-      res.setHeader('Content-Length', stat.size);
+  // === ESTRATEGIA 1: cobalt.tools ===
+  try {
+    console.log(`[COBALT] Intentando cobalt.tools...`);
+    const cobaltUrl = await downloadViaCobalt(videoId);
+    console.log(`[COBALT] URL obtenida, haciendo stream...`);
+    const https2 = require('https');
+    const http2 = require('http');
+    const client = cobaltUrl.startsWith('https') ? https2 : http2;
+    client.get(cobaltUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (audioRes) => {
+      if (audioRes.statusCode !== 200) {
+        console.warn(`[COBALT] Stream status ${audioRes.statusCode}, usando yt-dlp...`);
+        if (!res.headersSent) {
+          doYtdlp((err, filePath) => {
+            if (err || !filePath) return res.status(500).json({ error: 'No se pudo descargar el audio.' });
+            const stat = fs.statSync(filePath);
+            res.setHeader('Content-Type', 'audio/mp4'); res.setHeader('Content-Length', stat.size);
+            const s = fs.createReadStream(filePath); s.pipe(res);
+            s.on('end', () => { try { fs.unlinkSync(filePath); } catch(e){} });
+          });
+        }
+        return;
+      }
+      console.log(`[COBALT] Stream OK`);
+      res.setHeader('Content-Type', audioRes.headers['content-type'] || 'audio/mp4');
+      if (audioRes.headers['content-length']) res.setHeader('Content-Length', audioRes.headers['content-length']);
       res.setHeader('Content-Disposition', `attachment; filename="${videoId}.m4a"`);
-      
-      const stream = fs.createReadStream(found);
-      stream.pipe(res);
-      stream.on('end', () => {
-        try { fs.unlinkSync(found); } catch(e) {}
-      });
-    } catch (err) {
-      console.error(`[ERROR] Fallo en descarga de ${videoId}:`, err.message);
-      // Limpiar archivos si falló
-      const filesToClean = fs.readdirSync(tmpDir).filter(f => f.startsWith(filePrefix));
-      for (const f of filesToClean) {
-        try { fs.unlinkSync(path.join(tmpDir, f)); } catch(e) {}
-      }
-      
-      if (!res.headersSent) {
-        res.status(500).json({ error: `No se pudo descargar el audio: ${err.message}` });
-      }
+      audioRes.pipe(res);
+    }).on('error', (err) => {
+      console.error(`[COBALT] Stream error:`, err.message);
+      if (!res.headersSent) res.status(500).json({ error: 'Error descargando audio.' });
+    });
+    return;
+  } catch (cobaltErr) {
+    console.warn(`[COBALT] Fallo: ${cobaltErr.message}. Usando yt-dlp...`);
+  }
+
+  // === ESTRATEGIA 2: yt-dlp ===
+  doYtdlp((err, filePath) => {
+    if (err || !filePath) {
+      console.error(`[ERROR] yt-dlp fallo:`, err?.message);
+      if (!res.headersSent) return res.status(500).json({ error: `No se pudo descargar: ${err?.message}` });
+      return;
     }
+    const stat = fs.statSync(filePath);
+    console.log(`[yt-dlp] Archivo: ${filePath} (${(stat.size/1024/1024).toFixed(2)} MB)`);
+    res.setHeader('Content-Type', 'audio/mp4'); res.setHeader('Content-Length', stat.size);
+    res.setHeader('Content-Disposition', `attachment; filename="${videoId}.m4a"`);
+    const s = fs.createReadStream(filePath); s.pipe(res);
+    s.on('end', () => { try { fs.unlinkSync(filePath); } catch(e){} });
+  });
 });
 
 /**
