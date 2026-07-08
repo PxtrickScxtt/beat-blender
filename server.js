@@ -33,6 +33,44 @@ function getYtDlpPath() {
 
 const YT_DLP = getYtDlpPath();
 
+/** 
+ * Si la variable de entorno YOUTUBE_COOKIES existe, la escribe a un archivo temporal
+ * y devuelve su path para pasarla a yt-dlp con --cookies.
+ */
+let cookiesFilePath = null;
+function getCookiesFile() {
+  if (cookiesFilePath && fs.existsSync(cookiesFilePath)) return cookiesFilePath;
+  const cookiesContent = process.env.YOUTUBE_COOKIES;
+  if (!cookiesContent) return null;
+  cookiesFilePath = path.join(os.tmpdir(), 'yt-cookies.txt');
+  try {
+    fs.writeFileSync(cookiesFilePath, cookiesContent, 'utf8');
+    console.log('[COOKIES] Archivo de cookies escrito en:', cookiesFilePath);
+  } catch(e) {
+    console.error('[COOKIES] Error escribiendo cookies:', e.message);
+    return null;
+  }
+  return cookiesFilePath;
+}
+
+/**
+ * Devuelve los argumentos base para yt-dlp incluyendo cookies si están disponibles
+ */
+function getYtdlpBaseArgs() {
+  const args = [
+    '--no-warnings',
+    '--no-check-certificates',
+  ];
+  const cookies = getCookiesFile();
+  if (cookies) {
+    args.push('--cookies', cookies);
+  } else {
+    // Sin cookies, intentar con extractor de TV que tiene menos restricciones
+    args.push('--extractor-args', 'youtube:player_client=tv_embedded,ios');
+  }
+  return args;
+}
+
 /**
  * Endpoint: GET /api/audio/:videoId
  * Descarga el audio real de YouTube usando yt-dlp y lo envía al cliente.
@@ -57,9 +95,7 @@ app.get('/api/audio/:videoId', async (req, res) => {
       const args = [
         '--no-playlist',
         '-f', 'ba/b',
-        '--no-warnings',
-        '--no-check-certificates',
-        '--extractor-args', 'youtube:player_client=ios,tv,web',
+        ...getYtdlpBaseArgs(),
         '-o', outputFile,
         url
       ];
@@ -132,9 +168,7 @@ app.get('/api/info/:videoId', async (req, res) => {
       execFile(YT_DLP, [
         '--no-playlist',
         '--dump-json',
-        '--no-warnings',
-        '--no-check-certificates',
-        '--extractor-args', 'youtube:player_client=ios,tv,web',
+        ...getYtdlpBaseArgs(),
         url
       ], { timeout: 15000 }, (error, stdout) => {
         if (error) reject(error);
@@ -162,9 +196,9 @@ app.get('/api/search/:query', async (req, res) => {
       execFile(YT_DLP, [
         `ytsearch10:${query}`,
         '--dump-json',
-        '--no-warnings',
-        '--no-check-certificates',
-        '--flat-playlist'
+        '--no-playlist',
+        ...getYtdlpBaseArgs(),
+        '--flat-playlist',
       ], { timeout: 20000, maxBuffer: 1024 * 1024 * 10 }, (error, stdout) => {
         if (error) {
           if (stdout.trim().length > 0) resolve(stdout);
