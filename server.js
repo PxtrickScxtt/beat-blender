@@ -59,7 +59,7 @@ app.get('/api/audio/:videoId', async (req, res) => {
         '-f', 'ba/b',
         '--no-warnings',
         '--no-check-certificates',
-        '--extractor-args', 'youtube:player_client=android',
+        '--extractor-args', 'youtube:player_client=ios,tv,web',
         '-o', outputFile,
         url
       ];
@@ -134,7 +134,7 @@ app.get('/api/info/:videoId', async (req, res) => {
         '--dump-json',
         '--no-warnings',
         '--no-check-certificates',
-        '--extractor-args', 'youtube:player_client=android',
+        '--extractor-args', 'youtube:player_client=ios,tv,web',
         url
       ], { timeout: 15000 }, (error, stdout) => {
         if (error) reject(error);
