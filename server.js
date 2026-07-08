@@ -94,7 +94,7 @@ app.get('/api/audio/:videoId', async (req, res) => {
     await new Promise((resolve, reject) => {
       const args = [
         '--no-playlist',
-        '-f', 'ba/b',
+        '-f', 'bestaudio/best',
         ...getYtdlpBaseArgs(),
         '-o', outputFile,
         url
