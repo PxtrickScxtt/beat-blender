@@ -76,7 +76,7 @@ function getYtdlpBaseArgs() {
 /**
  * Intenta descargar via cobalt.tools API usando una de las instancias publicas
  */
-async function downloadViaCobalt(videoId, apiHost = 'rue-cobalt.xenon.zone') {
+async function downloadViaCobalt(videoId, apiHost = 'cblt.fariz.dev') {
   const https = require('https');
   const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
   const body = JSON.stringify({ url: youtubeUrl, downloadMode: 'audio', audioFormat: 'best' });
@@ -102,6 +102,48 @@ async function downloadViaCobalt(videoId, apiHost = 'rue-cobalt.xenon.zone') {
     req.write(body);
     req.end();
   });
+}
+
+/**
+ * Intenta descargar via SaveNow (loader.to backend) con polling de progreso
+ */
+async function downloadViaSaveNow(videoId) {
+  const https = require('https');
+  const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  const initUrl = `https://p.savenow.to/api/v2/download?button=1&format=mp3&url=${encodeURIComponent(ytUrl)}`;
+  
+  const getJson = (url) => new Promise((resolve, reject) => {
+    https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); }
+        catch(e) { reject(new Error('JSON invalido')); }
+      });
+    }).on('error', reject);
+  });
+
+  console.log('[SAVENOW] Iniciando conversión...');
+  const initData = await getJson(initUrl);
+  if (!initData.success || !initData.id) {
+    throw new Error('SaveNow init falló');
+  }
+
+  const taskId = initData.id;
+  const progressUrl = `https://p.savenow.to/api/progress?id=${taskId}`;
+
+  for (let i = 0; i < 20; i++) { // Max 40 segundos
+    await new Promise(r => setTimeout(r, 2000));
+    console.log(`[SAVENOW] Consultando progreso (intento ${i+1})...`);
+    const progressData = await getJson(progressUrl);
+    if (progressData.success === 1 && progressData.download_url) {
+      return progressData.download_url;
+    }
+    if (progressData.success === 0) {
+      throw new Error('SaveNow falló en procesar');
+    }
+  }
+  throw new Error('SaveNow timeout');
 }
 
 /**
@@ -152,6 +194,7 @@ app.get('/api/audio/:videoId', async (req, res) => {
 
   // === ESTRATEGIA 1: cobalt.tools (Instancias Públicas Rotativas) ===
   const cobaltHosts = [
+    'cblt.fariz.dev',
     'rue-cobalt.xenon.zone',
     'dog.kittycat.boo',
     'cobaltapi.kittycat.boo',
@@ -190,6 +233,39 @@ app.get('/api/audio/:videoId', async (req, res) => {
     } catch (cobaltErr) {
       console.warn(`[COBALT] Instancia ${host} falló: ${cobaltErr.message}`);
     }
+  }
+
+  // === ESTRATEGIA 1.5: SaveNow API (loader.to Backend) ===
+  try {
+    console.log(`[SAVENOW] Intentando SaveNow...`);
+    const downloadUrl = await downloadViaSaveNow(videoId);
+    console.log(`[SAVENOW] URL de descarga obtenida: ${downloadUrl}`);
+    const https3 = require('https');
+    const http3 = require('http');
+    const client = downloadUrl.startsWith('https') ? https3 : http3;
+    
+    const success = await new Promise((resolveStream) => {
+      client.get(downloadUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (audioRes) => {
+        if (audioRes.statusCode !== 200) {
+          console.warn(`[SAVENOW] Stream devolvió status ${audioRes.statusCode}`);
+          resolveStream(false);
+          return;
+        }
+        console.log(`[SAVENOW] Stream exitoso`);
+        res.setHeader('Content-Type', audioRes.headers['content-type'] || 'audio/mpeg');
+        if (audioRes.headers['content-length']) res.setHeader('Content-Length', audioRes.headers['content-length']);
+        res.setHeader('Content-Disposition', `attachment; filename="${videoId}.mp3"`);
+        audioRes.pipe(res);
+        resolveStream(true);
+      }).on('error', (err) => {
+        console.error(`[SAVENOW] Error de stream:`, err.message);
+        resolveStream(false);
+      });
+    });
+
+    if (success) return;
+  } catch (saveNowErr) {
+    console.warn(`[SAVENOW] Falló: ${saveNowErr.message}. Cayendo en yt-dlp...`);
   }
 
   // === ESTRATEGIA 2: yt-dlp ===
