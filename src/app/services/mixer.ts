@@ -46,6 +46,26 @@ export class MixerService {
   public playerADuration = signal<number>(0);
   public playerBDuration = signal<number>(0);
 
+  // Sistema de notificaciones flotantes (Toasts)
+  public toast = signal<{ message: string; type: 'success' | 'error' | 'info'; actionLabel?: string; action?: () => void } | null>(null);
+  public retryingTrackId = signal<string | null>(null);
+  private toastTimeout: any = null;
+
+  public showToast(message: string, type: 'success' | 'error' | 'info' = 'info', duration = 8000, actionLabel?: string, action?: () => void): void {
+    if (this.toastTimeout) clearTimeout(this.toastTimeout);
+    this.toast.set({ message, type, actionLabel, action });
+    if (duration > 0) {
+      this.toastTimeout = setTimeout(() => {
+        this.toast.set(null);
+      }, duration);
+    }
+  }
+
+  public clearToast(): void {
+    if (this.toastTimeout) clearTimeout(this.toastTimeout);
+    this.toast.set(null);
+  }
+
   // Instancias de los reproductores de YouTube
   private playerA: any = null;
   private playerB: any = null;
@@ -265,8 +285,78 @@ export class MixerService {
         this.preloadTrackOnPlayer(nextPlay, this.queue()[this.currentIndex() + 1]);
       }
 
-      alert('Los servidores proxy de descarga están saturados en este momento. La canción se añadió en modo "Online". Podrás escucharla y hacer las mezclas en vivo normalmente, pero para descargar el mix final completo deberás usar la función "Grabar en Vivo" o descargar el MP3 del buscador y arrastrarlo manualmente.');
+      this.showToast(
+        'Los servidores proxy de descarga están saturados. La canción se añadió en modo "Online". Puede reintentar la descarga.',
+        'error',
+        10000,
+        'REINTENTAR',
+        () => this.retryDownloadTrack(newTrack.id)
+      );
     }
+  }
+
+  /**
+   * Intenta descargar de nuevo el audio de un track que está en modo online
+   */
+  public async retryDownloadTrack(trackId: string): Promise<void> {
+    const track = this.queue().find(t => t.id === trackId);
+    if (!track || track.source === 'local') return;
+
+    this.retryingTrackId.set(trackId);
+    this.isDownloadingTrack.set(true);
+    this.downloadProgress.set(15);
+
+    try {
+      this.downloadProgress.set(30);
+      const audioBlob = await this.spotifyYoutube.downloadAudioTrack(track.videoId);
+      this.downloadProgress.set(70);
+
+      // Crear un archivo virtual
+      const file = new File([audioBlob], `${track.title}.m4a`, { type: 'audio/mp4' });
+      this.downloadProgress.set(90);
+
+      // Registrar en el mapa local
+      this.localFilesMap.set(track.id, file);
+
+      // Actualizar a local en la lista
+      this.queue.update(q => q.map(t => t.id === trackId ? { ...t, source: 'local' } : t));
+      this.saveQueueToLocalStorage();
+
+      // Forzar recarga en el reproductor si está en cola de reproducción
+      if (this.currentIndex() !== -1) {
+        const currentTrack = this.queue()[this.currentIndex()];
+        const nextTrack = this.queue()[this.currentIndex() + 1];
+        if (currentTrack && currentTrack.id === trackId) {
+          this.preloadTrackOnPlayer(this.activePlayer(), currentTrack);
+        } else if (nextTrack && nextTrack.id === trackId) {
+          const nextPlay = this.activePlayer() === 'A' ? 'B' : 'A';
+          this.preloadTrackOnPlayer(nextPlay, nextTrack);
+        }
+      }
+
+      this.downloadProgress.set(100);
+      this.showToast(`¡Pista "${track.title}" descargada con éxito!`, 'success');
+      
+      setTimeout(() => {
+        this.isDownloadingTrack.set(false);
+        this.retryingTrackId.set(null);
+      }, 800);
+
+    } catch (e) {
+      console.warn('Re-descarga fallida:', e);
+      this.isDownloadingTrack.set(false);
+      this.downloadProgress.set(0);
+      this.retryingTrackId.set(null);
+      this.showToast(
+        'Los servidores proxy siguen saturados. No se pudo descargar en este momento.',
+        'error',
+        8000,
+        'VOLVER A INTENTAR',
+        () => this.retryDownloadTrack(trackId)
+      );
+    }
+  }
+
   }
 
   /**

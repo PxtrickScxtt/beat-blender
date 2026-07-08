@@ -115,6 +115,24 @@
                 } @else {
                   <span class="text-[8px] bg-red-950 text-red-400 border border-red-900 px-1 rounded-sm">YouTube</span>
                 }
+                
+                @if (track.source !== 'local') {
+                  <button 
+                    (click)="mixer.retryDownloadTrack(track.id)" 
+                    [disabled]="mixer.retryingTrackId() !== null"
+                    class="text-[8px] font-bold text-dj-neon-cyan hover:text-white bg-dj-neon-cyan/10 hover:bg-dj-neon-cyan/35 border border-dj-neon-cyan/30 px-1.5 py-0.5 rounded transition-all cursor-pointer flex items-center space-x-1 disabled:opacity-30 disabled:cursor-not-allowed"
+                    title="Intentar descargar audio local de nuevo"
+                  >
+                    @if (mixer.retryingTrackId() === track.id) {
+                      <svg class="animate-spin h-2.5 w-2.5 text-dj-neon-cyan" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    }
+                    <span>VOLVER A PROCESAR</span>
+                  </button>
+                }
+                
                 <span class="text-[9px] font-mono text-slate-500">
                   Mix: {{ formatTime(track.startMinutes, track.startSeconds) }} &rarr; {{ formatTime(track.endMinutes, track.endSeconds) }}
                 </span>
