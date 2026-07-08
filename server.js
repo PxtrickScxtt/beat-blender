@@ -61,7 +61,8 @@ function getYtdlpBaseArgs() {
     '--no-warnings',
     '--no-check-certificates',
     '--geo-bypass',
-    '--extractor-args', 'youtube:player_client=tv_embedded,ios,web',
+    // web_creator no requiere PO token y funciona desde IPs de servidores cloud
+    '--extractor-args', 'youtube:player_client=web_creator',
   ];
   const cookies = getCookiesFile();
   if (cookies) {
