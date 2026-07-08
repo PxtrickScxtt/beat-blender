@@ -10,21 +10,21 @@
         </svg>
       </div>
       <div>
-        <h1 class="text-xl font-black tracking-widest bg-gradient-to-r from-dj-neon-purple via-dj-neon-pink to-dj-neon-cyan bg-clip-text text-transparent font-mono">
+        <h1 class="text-lg sm:text-xl font-black tracking-widest bg-gradient-to-r from-dj-neon-purple via-dj-neon-pink to-dj-neon-cyan bg-clip-text text-transparent font-mono">
           BEATBLENDER
         </h1>
-        <p class="text-[10px] text-slate-400 font-mono tracking-wider">HYBRID DJ MIXING CONSOLE</p>
+        <p class="text-[9px] text-slate-400 font-mono tracking-wider hidden sm:block">HYBRID DJ MIXING CONSOLE</p>
       </div>
     </div>
 
     <!-- Indicador de Estado y Controles Rápidos -->
-    <div class="flex items-center space-x-4">
-      <div class="flex items-center space-x-2 bg-slate-900/80 border border-slate-700/50 rounded-full px-3 py-1.5 text-xs">
+    <div class="flex items-center space-x-2 sm:space-x-4">
+      <div class="flex items-center space-x-1.5 sm:space-x-2 bg-slate-900/80 border border-slate-700/50 rounded-full px-2 sm:px-3 py-1.5 text-[10px] sm:text-xs">
         <span class="relative flex h-2 w-2">
           <span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" [ngClass]="mixer.isPlaying() ? 'bg-dj-neon-green' : 'bg-amber-500'"></span>
           <span class="relative inline-flex rounded-full h-2 w-2" [ngClass]="mixer.isPlaying() ? 'bg-dj-neon-green' : 'bg-amber-500'"></span>
         </span>
-        <span class="font-mono text-slate-300">
+        <span class="font-mono text-slate-300 hidden md:inline">
           {{ mixer.isPlaying() ? 'LIVE MIXING' : 'READY TO MIX' }}
         </span>
       </div>
@@ -32,7 +32,7 @@
       <!-- Botón para ver pantallas de video -->
       <button 
         (click)="toggleVideoMonitor()" 
-        class="flex items-center space-x-1.5 px-4 py-1.5 rounded-full text-xs font-semibold border transition-all duration-300 cursor-pointer"
+        class="flex items-center space-x-1 px-3 sm:px-4 py-1.5 rounded-full text-xs font-semibold border transition-all duration-300 cursor-pointer"
         [ngClass]="showVideoMonitor() 
           ? 'bg-dj-neon-cyan/20 border-dj-neon-cyan/50 text-dj-neon-cyan shadow-[0_0_10px_rgba(6,182,212,0.25)]' 
           : 'bg-slate-900/80 border-slate-700/50 text-slate-300 hover:border-slate-500'"
@@ -41,7 +41,7 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M6 20.25h12A2.25 2.25 0 0 0 20.25 18V6A2.25 2.25 0 0 0 18 3.75H6A2.25 2.25 0 0 0 3.75 6v12A2.25 2.25 0 0 0 6 20.25Z" />
           <path stroke-linecap="round" stroke-linejoin="round" d="m10.5 13.5 3-3m0 0h-3m3 0v3M8.25 9.75h.008v.008H8.25V9.75Zm.008 4.5H8.25v.008h.008v-.008Zm1.118-2.25H9.38v.008h.008v-.008Zm3.366-2.25h-.008v.008h.008V9.75Zm-.008 4.5H12.75v.008h.008v-.008Zm1.118-2.25h-.008v.008h.008v-.008ZM15.75 9.75h.008v.008H15.75V9.75Zm.008 4.5H15.75v.008h.008v-.008Z" />
         </svg>
-        <span>MONITOR VJ</span>
+        <span class="hidden sm:inline">MONITOR VJ</span>
       </button>
     </div>
   </header>
@@ -50,7 +50,7 @@
   <div class="flex-1 flex flex-row justify-center items-start w-full relative">
     
     <!-- BANNER IZQUIERDO SKYSCRAPER (160x600) - Solo visible en escritorios muy grandes -->
-    <aside class="hidden xl:flex sticky top-24 mx-4 flex-col items-center min-w-[160px] min-h-[600px] bg-slate-950/20 border border-slate-800/40 rounded-2xl p-1 shadow-md">
+    <aside class="hidden 2xl:flex sticky top-24 mx-4 flex-col items-center min-w-[160px] min-h-[600px] bg-slate-950/20 border border-slate-800/40 rounded-2xl p-1 shadow-md">
       <div id="adsterra-160-600" class="w-[160px] h-[600px] flex items-center justify-center"></div>
     </aside>
 
@@ -71,9 +71,9 @@
     <!-- Se mantienen siempre en el DOM pero se ocultan visualmente cuando showVideoMonitor es falso -->
     <div 
       class="transition-all duration-500 overflow-hidden"
-      [ngClass]="showVideoMonitor() ? 'max-h-[300px] opacity-100 mb-2' : 'max-h-0 opacity-0 pointer-events-none absolute -top-9999 left-0'"
+      [ngClass]="showVideoMonitor() ? 'max-h-[600px] sm:max-h-[300px] opacity-100 mb-2' : 'max-h-0 opacity-0 pointer-events-none absolute -top-9999 left-0'"
     >
-      <div class="grid grid-cols-2 gap-4 bg-slate-950/60 p-4 border border-dj-border rounded-2xl backdrop-blur-md">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-950/60 p-4 border border-dj-border rounded-2xl backdrop-blur-md">
         <!-- Deck A Monitor -->
         <div class="relative aspect-video bg-black rounded-lg overflow-hidden border border-slate-800">
           <div id="yt-player-a" class="w-full h-full"></div>
@@ -141,7 +141,7 @@
   </main>
 
   <!-- BANNER DERECHO SKYSCRAPER (160x300) - Solo visible en escritorios muy grandes -->
-  <aside class="hidden xl:flex sticky top-24 mx-4 flex-col items-center min-w-[160px] min-h-[300px] bg-slate-950/20 border border-slate-800/40 rounded-2xl p-1 shadow-md">
+  <aside class="hidden 2xl:flex sticky top-24 mx-4 flex-col items-center min-w-[160px] min-h-[300px] bg-slate-950/20 border border-slate-800/40 rounded-2xl p-1 shadow-md">
     <div id="adsterra-160-300" class="w-[160px] h-[300px] flex items-center justify-center"></div>
   </aside>
 
