@@ -46,12 +46,25 @@
     </div>
   </header>
 
-  <!-- CONTENIDO PRINCIPAL -->
-  <main class="flex-1 p-6 lg:p-8 max-w-7xl mx-auto w-full flex flex-col gap-6 lg:gap-8">
+  <!-- SECCIÓN CONTENEDORA CON BANNER A LOS LADOS -->
+  <div class="flex-1 flex flex-row justify-center items-start w-full relative">
     
-    <!-- ADSTERRA 728x90 HORIZONTAL LEADERBOARD BANNER -->
-    <div class="flex justify-center items-center overflow-hidden min-h-[90px] w-full bg-slate-950/20 border border-slate-800/40 rounded-2xl p-1 shadow-md">
-      <div id="adsterra-728-90" class="w-[728px] h-[90px] flex items-center justify-center"></div>
+    <!-- BANNER IZQUIERDO SKYSCRAPER (160x600) - Solo visible en escritorios muy grandes -->
+    <aside class="hidden xl:flex sticky top-24 mx-4 flex-col items-center min-w-[160px] min-h-[600px] bg-slate-950/20 border border-slate-800/40 rounded-2xl p-1 shadow-md">
+      <div id="adsterra-160-600" class="w-[160px] h-[600px] flex items-center justify-center"></div>
+    </aside>
+
+  <!-- CONTENIDO PRINCIPAL -->
+  <main class="flex-1 p-6 lg:p-8 max-w-7xl w-full flex flex-col gap-6 lg:gap-8">
+    
+    <!-- ADSTERRA RESPONSIVE HORIZONTAL BANNER (728x90 en LG+, 468x60 en MD, 320x50 en SM/XS) -->
+    <div class="flex justify-center items-center overflow-hidden w-full bg-slate-950/20 border border-slate-800/40 rounded-2xl p-1 shadow-md min-h-[50px] md:min-h-[60px] lg:min-h-[90px]">
+      <!-- 728x90 (Desktop) -->
+      <div id="adsterra-728-90" class="hidden lg:flex w-[728px] h-[90px] items-center justify-center"></div>
+      <!-- 468x60 (Tablet) -->
+      <div id="adsterra-468-60" class="hidden md:flex lg:hidden w-[468px] h-[60px] items-center justify-center"></div>
+      <!-- 320x50 (Mobile) -->
+      <div id="adsterra-320-50" class="flex md:hidden w-[320px] h-[50px] items-center justify-center"></div>
     </div>
     
     <!-- CONTENEDORES DE VIDEO DE YOUTUBE (Ocultos o Visibles según VJ Monitor) -->
@@ -126,6 +139,13 @@
       
     </div>
   </main>
+
+  <!-- BANNER DERECHO SKYSCRAPER (160x300) - Solo visible en escritorios muy grandes -->
+  <aside class="hidden xl:flex sticky top-24 mx-4 flex-col items-center min-w-[160px] min-h-[300px] bg-slate-950/20 border border-slate-800/40 rounded-2xl p-1 shadow-md">
+    <div id="adsterra-160-300" class="w-[160px] h-[300px] flex items-center justify-center"></div>
+  </aside>
+
+</div>
 
   <!-- MODAL BUSCADOR DE CANCIONES -->
   @if (showSearchModal()) {
