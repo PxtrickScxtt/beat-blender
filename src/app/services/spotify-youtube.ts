@@ -38,7 +38,7 @@ export class SpotifyYoutubeService {
     // 1. SERVIDOR PROXY LOCAL (MÁS FIABLE - Audio real de YouTube)
     // ═══════════════════════════════════════════════════════════════
     try {
-      const localProxyUrl = `http://localhost:3001/api/audio/${videoId}`;
+      const localProxyUrl = `https://beatblender-proxy.onrender.com/api/audio/${videoId}`;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s para canciones largas
 
@@ -231,7 +231,7 @@ export class SpotifyYoutubeService {
   private async searchYoutubeApi(query: string): Promise<SearchResult[]> {
     // 1. INTENTAR CON EL PROXY LOCAL PRIMERO (Más rápido y sin bloqueos)
     try {
-      const localProxyUrl = `http://localhost:3001/api/search/${encodeURIComponent(query)}`;
+      const localProxyUrl = `https://beatblender-proxy.onrender.com/api/search/${encodeURIComponent(query)}`;
       const response = await fetch(localProxyUrl);
       if (response.ok) {
         const data = await response.json();
