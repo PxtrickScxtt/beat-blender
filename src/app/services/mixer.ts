@@ -357,8 +357,6 @@ export class MixerService {
     }
   }
 
-  }
-
   /**
    * Registra y agrega un archivo de música local (MP3/WAV)
    */
