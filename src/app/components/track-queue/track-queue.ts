@@ -1,4 +1,4 @@
-import { Component, inject, signal, output } from '@angular/core';
+import { Component, inject, signal, output, AfterViewInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MixerService, Track } from '../../services/mixer';
 
@@ -8,11 +8,31 @@ import { MixerService, Track } from '../../services/mixer';
   templateUrl: './track-queue.html',
   styleUrl: './track-queue.scss',
 })
-export class TrackQueue {
+export class TrackQueue implements AfterViewInit {
   public mixer = inject(MixerService);
   
   // Emite evento para abrir el buscador
   public onAddClick = output<void>();
+
+  ngAfterViewInit(): void {
+    // Cargar Adsterra Banner 300x250 con un pequeño retardo para evitar colisiones de variables atOptions
+    setTimeout(() => {
+      const container = document.getElementById('adsterra-300-250');
+      if (container) {
+        (window as any).atOptions = {
+          'key' : '31ba9a1b8f483fef5846e224ebd3889c',
+          'format' : 'iframe',
+          'height' : 250,
+          'width' : 300,
+          'params' : {}
+        };
+        const script = document.createElement('script');
+        script.type = 'text/javascript';
+        script.src = 'https://www.highperformanceformat.com/31ba9a1b8f483fef5846e224ebd3889c/invoke.js';
+        container.appendChild(script);
+      }
+    }, 200);
+  }
 
   // ID del track que se está editando actualmente (acordeón abierto)
   public editingTrackId = signal<string | null>(null);

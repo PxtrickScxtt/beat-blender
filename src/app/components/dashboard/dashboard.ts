@@ -27,6 +27,24 @@ export class Dashboard implements AfterViewInit {
       // Cargar cola guardada de LocalStorage
       this.mixer.loadQueueFromLocalStorage();
     });
+
+    // Cargar Adsterra Banner 728x90 horizontal con un retardo para evitar colisión de atOptions
+    setTimeout(() => {
+      const container = document.getElementById('adsterra-728-90');
+      if (container) {
+        (window as any).atOptions = {
+          'key' : '5f028d9dd838a0b3fafdcca3fc9475bb',
+          'format' : 'iframe',
+          'height' : 90,
+          'width' : 728,
+          'params' : {}
+        };
+        const script = document.createElement('script');
+        script.type = 'text/javascript';
+        script.src = 'https://www.highperformanceformat.com/5f028d9dd838a0b3fafdcca3fc9475bb/invoke.js';
+        container.appendChild(script);
+      }
+    }, 600);
   }
 
   public toggleVideoMonitor(): void {
