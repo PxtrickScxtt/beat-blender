@@ -60,13 +60,12 @@ function getYtdlpBaseArgs() {
   const args = [
     '--no-warnings',
     '--no-check-certificates',
+    '--geo-bypass',
+    '--extractor-args', 'youtube:player_client=tv_embedded,ios,web',
   ];
   const cookies = getCookiesFile();
   if (cookies) {
     args.push('--cookies', cookies);
-  } else {
-    // Sin cookies, intentar con extractor de TV que tiene menos restricciones
-    args.push('--extractor-args', 'youtube:player_client=tv_embedded,ios');
   }
   return args;
 }
@@ -94,7 +93,6 @@ app.get('/api/audio/:videoId', async (req, res) => {
     await new Promise((resolve, reject) => {
       const args = [
         '--no-playlist',
-        '-f', 'bestaudio/best',
         ...getYtdlpBaseArgs(),
         '-o', outputFile,
         url
