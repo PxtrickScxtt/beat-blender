@@ -1,4 +1,4 @@
-FROM node:20-bullseye
+FROM node:20-bookworm
 
 # Instalar Python, FFmpeg y dependencias necesarias para yt-dlp
 RUN apt-get update && \
