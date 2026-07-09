@@ -156,9 +156,20 @@ async function downloadViaSaveNow(videoId) {
   for (let i = 0; i < 35; i++) { // Max 70 segundos para dar margen en conversiones lentas
     await new Promise(r => setTimeout(r, 2000));
     console.log(`[SAVENOW] Consultando progreso (intento ${i+1})...`);
-    const progressData = await getJson(progressUrl);
-    if (progressData.success === 1 && progressData.download_url) {
-      return progressData.download_url;
+    try {
+      const progressData = await getJson(progressUrl);
+      if (progressData.success === 1 && progressData.download_url) {
+        return progressData.download_url;
+      }
+      if (progressData.success === 0 && progressData.error) {
+        throw new Error(`SaveNow API error: ${progressData.error}`);
+      }
+    } catch (err) {
+      console.warn(`[SAVENOW] Advertencia (intento ${i+1}): ${err.message}. Reintentando...`);
+      if (err.message.includes('SaveNow API error')) {
+        throw err;
+      }
+      // Si es un error temporal de conexión o JSON inválido, continuamos reintentando
     }
   }
   throw new Error('SaveNow timeout');
@@ -455,7 +466,7 @@ app.get('/api/audio/:videoId', async (req, res) => {
     'cobaltapi.cjs.nz',
     'cobalt.drgns.space',
     'rue-cobalt.xenon.zone',
-    'cobalt.privacydev.net'
+    'cobalt.synesthesiam.com'
   ];
   cobaltHosts.forEach(host => {
     promises.push(tryCobaltHost(host));
@@ -465,9 +476,10 @@ app.get('/api/audio/:videoId', async (req, res) => {
   const invidiousHosts = [
     'yewtu.be',
     'vid.puffyan.us',
-    'inv.tux.im',
     'invidious.projectsegfau.lt',
-    'invidious.privacydev.net'
+    'invidious.io.lol',
+    'iv.melmac.space',
+    'invidious.flokinet.to'
   ];
   invidiousHosts.forEach(host => {
     promises.push(tryInvidiousHost(host));
@@ -477,8 +489,10 @@ app.get('/api/audio/:videoId', async (req, res) => {
   const pipedHosts = [
     'pipedapi.kavin.rocks',
     'pipedapi.lunar.icu',
-    'pipedapi.colbydray.com',
-    'pipedapi.privacydev.net'
+    'piped-api.garudalinux.org',
+    'piped-api.lcomera.co',
+    'piped-api.privacy.com.de',
+    'pipedapi.r4fo.com'
   ];
   pipedHosts.forEach(host => {
     promises.push(tryPipedHost(host).catch(e => {
