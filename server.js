@@ -160,9 +160,6 @@ async function downloadViaSaveNow(videoId) {
     if (progressData.success === 1 && progressData.download_url) {
       return progressData.download_url;
     }
-    if (progressData.success === 0) {
-      throw new Error('SaveNow falló en procesar');
-    }
   }
   throw new Error('SaveNow timeout');
 }
