@@ -57,17 +57,18 @@ export class SpotifyYoutubeService {
       clearTimeout(timeoutId);
  
       if (response.ok) {
-        const contentLength = response.headers.get('content-length');
-        const total = contentLength ? parseInt(contentLength, 10) : 0;
-        
-        if (!response.body || total === 0) {
-          // Fallback en caso de que no soporte ReadableStream o no tenga content-length
+        if (!response.body) {
+          // Fallback si no hay soporte de ReadableStream
           const blob = await response.blob();
           if (blob && blob.size > 50000) {
             console.log(`✅ Audio descargado vía proxy local (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
             return blob;
           }
         } else {
+          const contentLength = response.headers.get('content-length');
+          const total = contentLength ? parseInt(contentLength, 10) : 0;
+          const displayTotal = total > 0 ? total : 6000000; // Estimar 6MB si falta content-length
+          
           const reader = response.body.getReader();
           let loaded = 0;
           const chunks = [];
@@ -79,8 +80,11 @@ export class SpotifyYoutubeService {
             chunks.push(value);
             loaded += value.byteLength;
             
-            if (onProgress && total > 0) {
-              const percent = Math.round((loaded / total) * 100);
+            if (onProgress) {
+              let percent = Math.round((loaded / displayTotal) * 100);
+              if (total === 0 && percent >= 100) {
+                percent = 99; // Capar al 99% si es estimado
+              }
               onProgress(percent);
             }
           }
@@ -134,16 +138,17 @@ export class SpotifyYoutubeService {
             
             const audioResponse = await fetch(json.url);
             if (audioResponse.ok) {
-              const contentLength = audioResponse.headers.get('content-length');
-              const total = contentLength ? parseInt(contentLength, 10) : 0;
-              
-              if (!audioResponse.body || total === 0) {
+              if (!audioResponse.body) {
                 const blob = await audioResponse.blob();
                 if (blob && blob.size > 50000) {
                   console.log(`✅ Audio descargado vía Cobalt directo en el navegador desde ${host} (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
                   return blob;
                 }
               } else {
+                const contentLength = audioResponse.headers.get('content-length');
+                const total = contentLength ? parseInt(contentLength, 10) : 0;
+                const displayTotal = total > 0 ? total : 6000000; // Estimar 6MB si falta content-length
+                
                 const reader = audioResponse.body.getReader();
                 let loaded = 0;
                 const chunks = [];
@@ -155,8 +160,11 @@ export class SpotifyYoutubeService {
                   chunks.push(value);
                   loaded += value.byteLength;
                   
-                  if (onProgress && total > 0) {
-                    const percent = Math.round((loaded / total) * 100);
+                  if (onProgress) {
+                    let percent = Math.round((loaded / displayTotal) * 100);
+                    if (total === 0 && percent >= 100) {
+                      percent = 99; // Capar al 99% si es estimado
+                    }
                     onProgress(percent);
                   }
                 }
