@@ -311,13 +311,144 @@ app.get('/api/audio/:videoId', async (req, res) => {
     });
   };
 
+  // --- MOTOR 4: Invidious Host ---
+  const tryInvidiousHost = async (host) => {
+    console.log(`[CARRERA] -> Iniciando Invidious en ${host}...`);
+    const invidiousUrl = `https://${host}/latest_version?id=${videoId}&itag=140&local=true`;
+    return new Promise((resolve, reject) => {
+      const https = require('https');
+      const http = require('http');
+      const client = invidiousUrl.startsWith('https') ? https : http;
+      
+      const streamReq = client.get(invidiousUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        timeout: 20000
+      }, (audioRes) => {
+        if (audioRes.statusCode !== 200 && audioRes.statusCode !== 302) {
+          audioRes.resume();
+          return reject(new Error(`Invidious [${host}]: HTTP ${audioRes.statusCode}`));
+        }
+        
+        // Si hay redirección (302)
+        if (audioRes.statusCode === 302 && audioRes.headers.location) {
+          const redirectUrl = audioRes.headers.location;
+          const redirectClient = redirectUrl.startsWith('https') ? https : http;
+          redirectClient.get(redirectUrl, { timeout: 20000 }, (redirRes) => {
+            if (redirRes.statusCode !== 200) {
+              redirRes.resume();
+              return reject(new Error(`Invidious [${host}] Redir: HTTP ${redirRes.statusCode}`));
+            }
+            const contentLength = parseInt(redirRes.headers['content-length'] || '-1');
+            if (contentLength === 0 || (contentLength > 0 && contentLength < 10000)) {
+              redirRes.resume();
+              return reject(new Error(`Invidious [${host}] Redir: tamaño inválido`));
+            }
+            console.log(`[CARRERA] -> ¡Invidious en ${host} ha GANADO la carrera!`);
+            resolve({
+              stream: redirRes,
+              contentType: redirRes.headers['content-type'] || 'audio/mp4',
+              contentLength: contentLength > 0 ? contentLength : null,
+              filename: `${videoId}.m4a`
+            });
+          }).on('error', reject);
+          return;
+        }
+
+        const contentLength = parseInt(audioRes.headers['content-length'] || '-1');
+        if (contentLength === 0 || (contentLength > 0 && contentLength < 10000)) {
+          audioRes.resume();
+          return reject(new Error(`Invidious [${host}]: tamaño inválido`));
+        }
+        console.log(`[CARRERA] -> ¡Invidious en ${host} ha GANADO la carrera!`);
+        resolve({
+          stream: audioRes,
+          contentType: audioRes.headers['content-type'] || 'audio/mp4',
+          contentLength: contentLength > 0 ? contentLength : null,
+          filename: `${videoId}.m4a`
+        });
+      });
+      streamReq.on('error', reject);
+      streamReq.on('timeout', () => {
+        streamReq.destroy();
+        reject(new Error(`Invidious [${host}]: timeout`));
+      });
+    });
+  };
+
+  // --- MOTOR 5: Piped Host ---
+  const tryPipedHost = async (host) => {
+    console.log(`[CARRERA] -> Iniciando Piped en ${host}...`);
+    const apiUrl = `https://${host}/streams/${videoId}`;
+    
+    // Obtener metadatos de los streams
+    const getStreamsJson = () => new Promise((resolve, reject) => {
+      const https = require('https');
+      const req = https.get(apiUrl, { 
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        timeout: 12000 
+      }, (apiRes) => {
+        if (apiRes.statusCode !== 200) {
+          apiRes.resume();
+          return reject(new Error(`Piped API ${host} status ${apiRes.statusCode}`));
+        }
+        let data = '';
+        apiRes.on('data', chunk => data += chunk);
+        apiRes.on('end', () => {
+          try { resolve(JSON.parse(data)); }
+          catch(e) { reject(new Error(`Piped API ${host} JSON inválido`)); }
+        });
+      });
+      req.on('error', reject);
+      req.on('timeout', () => { req.destroy(); reject(new Error(`Piped API ${host} timeout`)); });
+    });
+
+    const data = await getStreamsJson();
+    if (!data.audioStreams || data.audioStreams.length === 0) {
+      throw new Error(`Piped [${host}]: Sin streams de audio`);
+    }
+
+    const streamUrl = data.audioStreams[0].url;
+    if (!streamUrl) throw new Error(`Piped [${host}]: URL de stream vacía`);
+
+    // Descargar el stream de audio
+    return new Promise((resolve, reject) => {
+      const https = require('https');
+      const http = require('http');
+      const client = streamUrl.startsWith('https') ? https : http;
+
+      const audioReq = client.get(streamUrl, { 
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        timeout: 25000 
+      }, (audioRes) => {
+        if (audioRes.statusCode !== 200) {
+          audioRes.resume();
+          return reject(new Error(`Piped Stream [${host}] HTTP ${audioRes.statusCode}`));
+        }
+        const contentLength = parseInt(audioRes.headers['content-length'] || '-1');
+        if (contentLength === 0 || (contentLength > 0 && contentLength < 10000)) {
+          audioRes.resume();
+          return reject(new Error(`Piped Stream [${host}] tamaño inválido`));
+        }
+        console.log(`[CARRERA] -> ¡Piped en ${host} ha GANADO la carrera!`);
+        resolve({
+          stream: audioRes,
+          contentType: audioRes.headers['content-type'] || 'audio/webm',
+          contentLength: contentLength > 0 ? contentLength : null,
+          filename: `${videoId}.webm`
+        });
+      });
+      audioReq.on('error', reject);
+      audioReq.on('timeout', () => { audioReq.destroy(); reject(new Error(`Piped Stream [${host}] timeout`)); });
+    });
+  };
+
   // --- Lista de promesas para correr en paralelo ---
   const promises = [];
 
-  // Añadir SaveNow
+  // 1. Añadir SaveNow
   promises.push(trySaveNow());
 
-  // Añadir hosts Cobalt activos
+  // 2. Añadir hosts Cobalt activos
   const cobaltHosts = [
     'cblt.fariz.dev',
     'cobalt.hpko.xyz',
@@ -330,7 +461,33 @@ app.get('/api/audio/:videoId', async (req, res) => {
     promises.push(tryCobaltHost(host));
   });
 
-  // Añadir clientes de yt-dlp
+  // 3. Añadir hosts Invidious activos
+  const invidiousHosts = [
+    'yewtu.be',
+    'vid.puffyan.us',
+    'inv.tux.im',
+    'invidious.projectsegfau.lt',
+    'invidious.privacydev.net'
+  ];
+  invidiousHosts.forEach(host => {
+    promises.push(tryInvidiousHost(host));
+  });
+
+  // 4. Añadir hosts Piped activos
+  const pipedHosts = [
+    'pipedapi.kavin.rocks',
+    'pipedapi.lunar.icu',
+    'pipedapi.colbydray.com',
+    'pipedapi.privacydev.net'
+  ];
+  pipedHosts.forEach(host => {
+    promises.push(tryPipedHost(host).catch(e => {
+      // Registrar error pero permitir que siga la carrera
+      throw new Error(`Piped [${host}] falló: ${e.message}`);
+    }));
+  });
+
+  // 5. Añadir clientes de yt-dlp
   const ytdlpClients = ['mweb', 'web_creator', 'ios'];
   ytdlpClients.forEach(client => {
     promises.push(tryYtdlpClient(client));
