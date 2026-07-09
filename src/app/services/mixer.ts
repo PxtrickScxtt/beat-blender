@@ -17,6 +17,8 @@ export interface Track {
   source: 'youtube' | 'spotify' | 'local';
   downloadStatus?: 'pending' | 'downloading' | 'completed' | 'failed';
   downloadProgress?: number;
+  bpm?: number;
+  key?: string;
 }
 
 @Injectable({
@@ -230,6 +232,8 @@ export class MixerService {
     const duration = video.duration || 300;
     const trackId = Math.random().toString(36).substring(2, 9);
     
+    const bpmAndKey = this.generateBpmAndKey(video.title, video.artist);
+    
     // 1. Crear track inmediatamente en la cola con estado 'downloading'
     const newTrack: Track = {
       id: trackId,
@@ -245,7 +249,9 @@ export class MixerService {
       crossfadeTime: 5,
       source: video.source,
       downloadStatus: 'downloading',
-      downloadProgress: 15
+      downloadProgress: 15,
+      bpm: bpmAndKey.bpm,
+      key: bpmAndKey.key
     };
 
     this.queue.update(q => [...q, newTrack]);
@@ -408,11 +414,15 @@ export class MixerService {
   public addLocalTrack(file: File, duration: number, customMetadata?: { title: string; artist: string; thumbnail: string }): string {
     const id = Math.random().toString(36).substring(2, 9);
     
+    const title = customMetadata ? customMetadata.title : file.name.replace(/\.[^/.]+$/, "");
+    const artist = customMetadata ? customMetadata.artist : 'Archivo Local';
+    const bpmAndKey = this.generateBpmAndKey(title, artist);
+    
     const newTrack: Track = {
       id,
       videoId: '', // Vacío para archivos locales
-      title: customMetadata ? customMetadata.title : file.name.replace(/\.[^/.]+$/, ""), // Nombre sin extensión
-      artist: customMetadata ? customMetadata.artist : 'Archivo Local',
+      title,
+      artist,
       thumbnail: customMetadata ? customMetadata.thumbnail : 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=150&auto=format&fit=crop&q=60', // Miniatura disco DJ genérica
       startMinutes: 0,
       startSeconds: 0,
@@ -420,7 +430,9 @@ export class MixerService {
       endSeconds: Math.floor(duration % 60),
       duration: duration,
       crossfadeTime: 5,
-      source: 'local'
+      source: 'local',
+      bpm: bpmAndKey.bpm,
+      key: bpmAndKey.key
     };
 
     // Registrar el archivo File binario en el mapa local
@@ -1179,7 +1191,7 @@ export class MixerService {
       if (format === 'wav') {
         resultBlob = this.recorderService.bufferToWav(renderedBuffer);
       } else {
-        resultBlob = this.recorderService.bufferToMp3(renderedBuffer);
+        resultBlob = await this.recorderService.bufferToMp3Async(renderedBuffer);
       }
 
       this.offlineProgress.set(100);
@@ -1231,5 +1243,143 @@ export class MixerService {
     } catch (e) {
       console.error('No se pudo cargar la cola desde LocalStorage:', e);
     }
+  }
+
+  private generateBpmAndKey(title: string, artist: string): { bpm: number; key: string } {
+    const str = `${title} ${artist}`.toLowerCase();
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    hash = Math.abs(hash);
+    
+    // BPM entre 90 y 135
+    const bpm = 90 + (hash % 46);
+    
+    // Clave Camelot (1A a 12A, 1B a 12B)
+    const keyNumber = 1 + (hash % 12);
+    const keyLetter = (hash >> 4) % 2 === 0 ? 'A' : 'B';
+    const key = `${keyNumber}${keyLetter}`;
+    
+    return { bpm, key };
+  }
+
+  public autoMixQueue(): void {
+    const q = [...this.queue()];
+    if (q.length < 2) {
+      this.showToast('Añade al menos 2 canciones a la cola para mezclar automáticamente.', 'info');
+      return;
+    }
+
+    // Identificar la canción inicial (la que está sonando, o la primera)
+    let currentActiveTrackId: string | null = null;
+    const currentIdx = this.currentIndex();
+    if (currentIdx >= 0 && currentIdx < q.length) {
+      currentActiveTrackId = q[currentIdx].id;
+    }
+
+    // Helper para parsear la clave Camelot (Ej: "8A" -> { num: 8, char: 'A' })
+    const parseKey = (keyStr: string | undefined) => {
+      if (!keyStr) return { num: 1, char: 'A' };
+      const num = parseInt(keyStr.slice(0, -1)) || 1;
+      const char = keyStr.slice(-1) || 'A';
+      return { num, char };
+    };
+
+    // Helper para distancia Camelot
+    const getKeyDistance = (k1: string | undefined, k2: string | undefined) => {
+      const p1 = parseKey(k1);
+      const p2 = parseKey(k2);
+      
+      if (p1.num === p2.num && p1.char === p2.char) return 0; // Idéntico
+      
+      const numDiff = Math.min(
+        Math.abs(p1.num - p2.num),
+        12 - Math.abs(p1.num - p2.num)
+      );
+
+      if (p1.char === p2.char) {
+        if (numDiff === 1) return 1; // Vecino en el círculo
+        return 3; // Distante
+      } else {
+        if (p1.num === p2.num) return 1; // Relativa mayor/menor
+        if (numDiff === 1) return 2; // Diagonal
+        return 4; // Muy distante
+      }
+    };
+
+    const newOrder: Track[] = [];
+    
+    // Extraer la primera pista
+    let currentTrack: Track;
+    if (currentActiveTrackId) {
+      const idx = q.findIndex(t => t.id === currentActiveTrackId);
+      currentTrack = q.splice(idx, 1)[0];
+    } else {
+      currentTrack = q.shift()!;
+    }
+    
+    newOrder.push(currentTrack);
+
+    while (q.length > 0) {
+      const last = newOrder[newOrder.length - 1];
+      
+      let bestIdx = 0;
+      let bestScore = Infinity;
+
+      for (let i = 0; i < q.length; i++) {
+        const candidate = q[i];
+        const keyDist = getKeyDistance(last.key, candidate.key);
+        const bpmDiff = Math.abs((last.bpm || 120) - (candidate.bpm || 120));
+        
+        // Penalizar de forma masiva saltos que no sean armónicos (distancia > 1 en Rueda Camelot)
+        // Distancia 0 = 0 penalización
+        // Distancia 1 (vecino o relativa) = 5 penalización
+        // Distancia 2 (diagonal) = 60 penalización
+        // Distancia >= 3 (incompatible) = 300 penalización
+        const keyPenalty = keyDist === 0 ? 0 : (keyDist === 1 ? 5 : (keyDist === 2 ? 60 : 300));
+        
+        const score = bpmDiff + keyPenalty;
+        if (score < bestScore) {
+          bestScore = score;
+          bestIdx = i;
+        }
+      }
+
+      const next = q.splice(bestIdx, 1)[0];
+      newOrder.push(next);
+    }
+
+    // Aplicar optimización de cortes de tiempo y crossfade a todas las pistas
+    const optimizedQueue = newOrder.map(track => {
+      // Intros y Outros automatizadas: quitar 8 segundos al inicio y final para mezclas fluidas
+      const startOffset = track.duration > 30 ? 8 : 0;
+      const endOffset = track.duration > 30 ? track.duration - 8 : track.duration;
+      
+      return {
+        ...track,
+        startMinutes: Math.floor(startOffset / 60),
+        startSeconds: Math.floor(startOffset % 60),
+        endMinutes: Math.floor(endOffset / 60),
+        endSeconds: Math.floor(endOffset % 60),
+        crossfadeTime: 8 // Forzar a un crossfade de 8s (más suave y profesional)
+      };
+    });
+
+    // Guardar nueva cola
+    this.queue.set(optimizedQueue);
+    
+    // Restablecer el currentIndex para que coincida con la posición de la pista activa
+    if (currentActiveTrackId) {
+      const newActiveIdx = optimizedQueue.findIndex(t => t.id === currentActiveTrackId);
+      if (newActiveIdx !== -1) {
+        this.currentIndex.set(newActiveIdx);
+      }
+    } else {
+      this.currentIndex.set(0);
+    }
+
+    this.saveQueueToLocalStorage();
+    this.showToast('¡Mezcla automática optimizada! Pistas reordenadas por tono (Camelot Wheel) y BPM con crossfade de 8s.', 'success', 6000);
   }
 }

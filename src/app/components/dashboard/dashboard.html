@@ -186,14 +186,14 @@
 
   <!-- TOAST NOTIFICATIONS FLOATING -->
   @if (mixer.toast(); as toast) {
-    <div class="fixed bottom-6 right-6 z-50 flex items-center justify-between p-4 rounded-2xl border shadow-[0_15px_50px_rgba(0,0,0,0.5)] backdrop-blur-xl max-w-sm w-full transition-all duration-300 animate-slide-up"
+    <div class="fixed bottom-6 left-6 right-6 sm:left-auto sm:right-6 z-50 flex items-center justify-between p-4 rounded-2xl border shadow-[0_15px_50px_rgba(0,0,0,0.5)] backdrop-blur-xl sm:max-w-sm transition-all duration-300 animate-slide-up"
       [ngClass]="{
         'bg-red-950/90 border-red-900/60 text-red-200': toast.type === 'error',
         'bg-emerald-950/90 border-emerald-900/60 text-emerald-200': toast.type === 'success',
         'bg-slate-950/95 border-slate-800 text-slate-200': toast.type === 'info'
       }"
     >
-      <div class="flex items-start space-x-3 mr-4">
+      <div class="flex items-start space-x-3 mr-4 min-w-0 flex-1">
         <!-- Icono de Error -->
         @if (toast.type === 'error') {
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0">
@@ -210,11 +210,11 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 1 1 1.063 1.06l-.041.02a.75.75 0 1 1-1.063-1.06Zm0-3.75.041-.02a.75.75 0 1 1 1.063 1.06l-.041.02a.75.75 0 1 1-1.063-1.06ZM12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18Z" />
           </svg>
         }
-        <div>
+        <div class="min-w-0 flex-1">
           <p class="text-[9px] font-mono font-bold uppercase tracking-widest text-slate-400">
             {{ toast.type === 'error' ? 'Error del Sistema' : (toast.type === 'success' ? 'Completado' : 'Aviso') }}
           </p>
-          <p class="text-[11px] mt-1 font-mono leading-normal">{{ toast.message }}</p>
+          <p class="text-[11px] mt-1 font-mono leading-normal break-words">{{ toast.message }}</p>
         </div>
       </div>
       

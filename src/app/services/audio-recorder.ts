@@ -160,7 +160,7 @@ export class AudioRecorderService {
       if (format === 'wav') {
         resultBlob = this.bufferToWav(audioBuffer);
       } else {
-        resultBlob = this.bufferToMp3(audioBuffer);
+        resultBlob = await this.bufferToMp3Async(audioBuffer);
       }
 
       this.processingProgress.set(100);
@@ -292,5 +292,122 @@ export class AudioRecorderService {
     }
 
     return new Blob(mp3Data, { type: 'audio/mp3' });
+  }
+
+  /**
+   * Codifica un AudioBuffer a MP3 de forma asíncrona usando un Web Worker
+   * para no congelar la pestaña del navegador.
+   */
+  public bufferToMp3Async(buffer: AudioBuffer): Promise<Blob> {
+    const channels = buffer.numberOfChannels;
+    const sampleRate = buffer.sampleRate;
+    const leftChannel = buffer.getChannelData(0);
+    const rightChannel = channels > 1 ? buffer.getChannelData(1) : null;
+
+    const workerCode = `
+      self.onmessage = function(e) {
+        const { leftChannel, rightChannel, sampleRate, channels } = e.data;
+        
+        try {
+          importScripts('https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js');
+        } catch (err) {
+          self.postMessage({ type: 'error', error: 'No se pudo cargar la librería de codificación MP3 desde CDN.' });
+          return;
+        }
+
+        if (typeof lamejs === 'undefined' || !lamejs.Mp3Encoder) {
+          self.postMessage({ type: 'error', error: 'Librería lamejs no inicializada correctamente en el Worker.' });
+          return;
+        }
+
+        const mp3encoder = new lamejs.Mp3Encoder(channels, sampleRate, 128);
+        const mp3Data = [];
+        const sampleBlockSize = 1152;
+        
+        const leftBlock = new Int16Array(1152);
+        const rightBlock = rightChannel ? new Int16Array(1152) : null;
+        
+        const len = leftChannel.length;
+        for (let i = 0; i < len; i += sampleBlockSize) {
+          const size = Math.min(sampleBlockSize, len - i);
+          
+          // Llenar leftBlock
+          for (let j = 0; j < size; j++) {
+            const s = leftChannel[i + j];
+            leftBlock[j] = s < 0 ? s * 32768 : s * 32767;
+          }
+          
+          // Llenar rightBlock
+          if (rightChannel && rightBlock) {
+            for (let j = 0; j < size; j++) {
+              const s = rightChannel[i + j];
+              rightBlock[j] = s < 0 ? s * 32768 : s * 32767;
+            }
+          }
+          
+          const lChunk = size === 1152 ? leftBlock : leftBlock.subarray(0, size);
+          const rChunk = (rightBlock && size === 1152) ? rightBlock : (rightBlock ? rightBlock.subarray(0, size) : null);
+          
+          let mp3buf;
+          if (rChunk) {
+            mp3buf = mp3encoder.encodeBuffer(lChunk, rChunk);
+          } else {
+            mp3buf = mp3encoder.encodeBuffer(lChunk);
+          }
+          
+          if (mp3buf.length > 0) {
+            mp3Data.push(mp3buf);
+          }
+          
+          if (i % (sampleBlockSize * 30) === 0) {
+            const progress = Math.round((i / len) * 100);
+            self.postMessage({ type: 'progress', progress });
+          }
+        }
+        
+        const mp3buf = mp3encoder.flush();
+        if (mp3buf.length > 0) {
+          mp3Data.push(mp3buf);
+        }
+        
+        self.postMessage({ type: 'done', data: mp3Data });
+      };
+    `;
+
+    const blob = new Blob([workerCode], { type: 'application/javascript' });
+    const workerUrl = URL.createObjectURL(blob);
+    const worker = new Worker(workerUrl);
+
+    return new Promise((resolve, reject) => {
+      worker.onmessage = (e) => {
+        const { type, progress, data, error } = e.data;
+        if (type === 'progress') {
+          const generalProgress = 50 + Math.round(progress * 0.45);
+          this.processingProgress.set(generalProgress);
+        } else if (type === 'done') {
+          const mp3Blob = new Blob(data, { type: 'audio/mp3' });
+          worker.terminate();
+          URL.revokeObjectURL(workerUrl);
+          resolve(mp3Blob);
+        } else if (type === 'error') {
+          worker.terminate();
+          URL.revokeObjectURL(workerUrl);
+          reject(new Error(error));
+        }
+      };
+
+      worker.onerror = (err) => {
+        worker.terminate();
+        URL.revokeObjectURL(workerUrl);
+        reject(err);
+      };
+
+      worker.postMessage({
+        leftChannel,
+        rightChannel,
+        sampleRate,
+        channels
+      });
+    });
   }
 }

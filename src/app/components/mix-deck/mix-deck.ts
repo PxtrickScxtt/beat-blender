@@ -16,7 +16,7 @@ export class MixDeck implements OnDestroy {
   protected readonly Math = Math;
 
   // Formato de descarga seleccionado
-  public selectedFormat = signal<'mp3' | 'wav' | 'webm'>('mp3');
+  public selectedFormat = signal<'mp3' | 'wav'>('mp3');
   
   // Mensaje informativo/error de grabación
   public recordingError = signal<string | null>(null);
@@ -192,7 +192,7 @@ export class MixDeck implements OnDestroy {
    */
   public async downloadInstantMix(): Promise<void> {
     this.recordingError.set(null);
-    const format = this.selectedFormat() === 'webm' ? 'mp3' : this.selectedFormat();
+    const format = this.selectedFormat();
     
     try {
       const finalBlob = await this.mixer.renderOfflineMix(format as any);
@@ -210,7 +210,7 @@ export class MixDeck implements OnDestroy {
   /**
    * Cambia el formato seleccionado de descarga
    */
-  public changeFormat(format: 'mp3' | 'wav' | 'webm'): void {
+  public changeFormat(format: 'mp3' | 'wav'): void {
     this.selectedFormat.set(format);
   }
 

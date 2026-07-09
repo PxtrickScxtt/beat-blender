@@ -7,25 +7,27 @@
 
   <!-- SECCIÓN 1: PANEL DE GRABACIÓN Y EXPORTACIÓN (NUEVO) -->
   <div class="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-4 flex flex-col gap-3 relative shadow-inner">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/40 pb-2">
       <div class="flex items-center space-x-2">
-        <span class="w-2.5 h-2.5 rounded-full" [ngClass]="recorder.isRecording() ? 'bg-red-500 animate-ping' : 'bg-slate-700'"></span>
-        <h3 class="text-xs font-mono font-bold tracking-wider text-slate-200">MOTOR DE EXPORTACIÓN DE MEZCLA</h3>
+        <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" [ngClass]="recorder.isRecording() ? 'bg-red-500 animate-ping' : 'bg-slate-700'"></span>
+        <h3 class="text-[10px] sm:text-xs font-mono font-bold tracking-wider text-slate-200">MOTOR DE EXPORTACIÓN DE MEZCLA</h3>
       </div>
       
-      @if (recorder.isRecording()) {
-        <span class="text-xs font-mono text-red-500 font-bold animate-pulse">
-          REC: {{ formatTime(recorder.recordingDuration()) }}
-        </span>
-      } @else if (recorder.isProcessing()) {
-        <span class="text-xs font-mono text-dj-neon-cyan font-bold animate-pulse">
-          PROCESANDO...
-        </span>
-      } @else {
-        <span class="text-[10px] font-mono text-slate-500">
-          DISCO LISTO
-        </span>
-      }
+      <div class="flex-shrink-0 text-left sm:text-right">
+        @if (recorder.isRecording()) {
+          <span class="text-xs font-mono text-red-500 font-bold animate-pulse">
+            REC: {{ formatTime(recorder.recordingDuration()) }}
+          </span>
+        } @else if (recorder.isProcessing()) {
+          <span class="text-xs font-mono text-dj-neon-cyan font-bold animate-pulse">
+            PROCESANDO...
+          </span>
+        } @else {
+          <span class="text-[10px] font-mono text-slate-500">
+            DISCO LISTO
+          </span>
+        }
+      </div>
     </div>
 
     <!-- Mensaje de error de grabación -->
@@ -64,11 +66,11 @@
       <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         
         <!-- Selector de formato -->
-        <div class="flex items-center space-x-1.5 bg-slate-900/90 border border-slate-800 p-1 rounded-xl">
+        <div class="flex items-center justify-between w-full sm:w-auto bg-slate-900/90 border border-slate-800 p-1 rounded-xl gap-1">
           <button 
             [disabled]="recorder.isRecording()"
             (click)="changeFormat('mp3')"
-            class="px-3 py-1.5 text-[10px] font-bold font-mono rounded-lg transition-all cursor-pointer disabled:opacity-50"
+            class="flex-1 sm:flex-none text-center px-4 py-1.5 text-[10px] font-bold font-mono rounded-lg transition-all cursor-pointer disabled:opacity-50"
             [ngClass]="selectedFormat() === 'mp3' ? 'bg-dj-neon-purple text-white shadow-sm' : 'text-slate-400 hover:text-white'"
           >
             MP3
@@ -76,18 +78,10 @@
           <button 
             [disabled]="recorder.isRecording()"
             (click)="changeFormat('wav')"
-            class="px-3 py-1.5 text-[10px] font-bold font-mono rounded-lg transition-all cursor-pointer disabled:opacity-50"
+            class="flex-1 sm:flex-none text-center px-4 py-1.5 text-[10px] font-bold font-mono rounded-lg transition-all cursor-pointer disabled:opacity-50"
             [ngClass]="selectedFormat() === 'wav' ? 'bg-dj-neon-purple text-white shadow-sm' : 'text-slate-400 hover:text-white'"
           >
             WAV (Sin pérdida)
-          </button>
-          <button 
-            [disabled]="recorder.isRecording()"
-            (click)="changeFormat('webm')"
-            class="px-3 py-1.5 text-[10px] font-bold font-mono rounded-lg transition-all cursor-pointer disabled:opacity-50"
-            [ngClass]="selectedFormat() === 'webm' ? 'bg-dj-neon-purple text-white shadow-sm' : 'text-slate-400 hover:text-white'"
-          >
-            WEBM
           </button>
         </div>
 
@@ -223,15 +217,21 @@
           @if (trackA) {
             <p class="text-sm font-semibold truncate text-slate-200">{{ trackA.title }}</p>
             <p class="text-xs text-slate-400 truncate mt-0.5">{{ trackA.artist }}</p>
-            <div class="flex items-center space-x-1.5 mt-1">
+            <div class="flex items-center space-x-1.5 mt-1.5 flex-wrap gap-1">
               @if (trackA.source === 'spotify') {
                 <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" title="Spotify Source"></span>
+              } @else if (trackA.source === 'local') {
+                <span class="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block" title="Local Source"></span>
               } @else {
                 <span class="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" title="YouTube Source"></span>
               }
-              <span class="text-[9px] font-mono text-slate-500">
+              <span class="text-[9px] font-mono text-slate-500 mr-1">
                 Segmento: {{ formatTime(trackA.startMinutes * 60 + trackA.startSeconds) }} - {{ formatTime(trackA.endMinutes * 60 + trackA.endSeconds) }}
               </span>
+              @if (trackA.key && trackA.bpm) {
+                <span class="text-[8px] bg-dj-neon-cyan/20 text-dj-neon-cyan border border-dj-neon-cyan/30 px-1.5 py-0.5 rounded font-mono font-bold" title="Clave Armónica Camelot">{{ trackA.key }}</span>
+                <span class="text-[8px] bg-dj-neon-purple/20 text-dj-neon-purple border border-dj-neon-purple/30 px-1.5 py-0.5 rounded font-mono font-bold">{{ trackA.bpm }} BPM</span>
+              }
             </div>
           } @else {
             <p class="text-sm font-semibold text-slate-500 font-mono">VACÍO</p>
@@ -287,15 +287,21 @@
           @if (trackB) {
             <p class="text-sm font-semibold truncate text-slate-200">{{ trackB.title }}</p>
             <p class="text-xs text-slate-400 truncate mt-0.5">{{ trackB.artist }}</p>
-            <div class="flex items-center space-x-1.5 mt-1">
+            <div class="flex items-center space-x-1.5 mt-1.5 flex-wrap gap-1">
               @if (trackB.source === 'spotify') {
                 <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" title="Spotify Source"></span>
+              } @else if (trackB.source === 'local') {
+                <span class="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block" title="Local Source"></span>
               } @else {
                 <span class="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" title="YouTube Source"></span>
               }
-              <span class="text-[9px] font-mono text-slate-500">
+              <span class="text-[9px] font-mono text-slate-500 mr-1">
                 Segmento: {{ formatTime(trackB.startMinutes * 60 + trackB.startSeconds) }} - {{ formatTime(trackB.endMinutes * 60 + trackB.endSeconds) }}
               </span>
+              @if (trackB.key && trackB.bpm) {
+                <span class="text-[8px] bg-dj-neon-cyan/20 text-dj-neon-cyan border border-dj-neon-cyan/30 px-1.5 py-0.5 rounded font-mono font-bold" title="Clave Armónica Camelot">{{ trackB.key }}</span>
+                <span class="text-[8px] bg-dj-neon-purple/20 text-dj-neon-purple border border-dj-neon-purple/30 px-1.5 py-0.5 rounded font-mono font-bold">{{ trackB.bpm }} BPM</span>
+              }
             </div>
           } @else {
             <p class="text-sm font-semibold text-slate-500 font-mono">VACÍO</p>
@@ -310,12 +316,12 @@
   <!-- SECCIÓN 4: DETALLE DE CANCIÓN ACTUAL Y BARRA DE PROGRESO -->
   @if (mixer.currentTrack(); as current) {
     <div class="bg-slate-950/50 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 relative">
-      <div class="flex justify-between items-center text-xs font-mono">
-        <div class="flex items-center space-x-2">
-          <span class="text-dj-neon-pink font-bold">SONANDO AHORA:</span>
-          <span class="text-slate-300 font-semibold truncate max-w-[200px] md:max-w-xs">{{ current.title }}</span>
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs font-mono">
+        <div class="flex items-center space-x-2 min-w-0 w-full sm:w-auto">
+          <span class="text-dj-neon-pink font-bold flex-shrink-0">SONANDO AHORA:</span>
+          <span class="text-slate-300 font-semibold truncate flex-1 min-w-0">{{ current.title }}</span>
         </div>
-        <div class="text-slate-400">
+        <div class="text-slate-400 flex-shrink-0 text-left sm:text-right">
           {{ getRelativeTimeFormatted() }} / {{ getCutDurationFormatted() }}
         </div>
       </div>
@@ -339,13 +345,13 @@
             class="absolute top-0 bottom-0 right-0 bg-dj-neon-pink/15 border-l border-dashed border-dj-neon-pink/40 flex items-center justify-center text-[7px] text-dj-neon-pink font-mono select-none px-1"
             [style.width.%]="fadePercent"
           >
-            FADE
+            <span class="hidden sm:inline">FADE</span>
           </div>
         }
       </div>
     </div>
   } @else {
-    <div class="bg-slate-950/20 border border-slate-800 border-dashed rounded-2xl py-6 flex flex-col items-center justify-center text-slate-500 font-mono text-xs">
+    <div class="bg-slate-950/20 border border-slate-800 border-dashed rounded-2xl py-6 px-4 flex flex-col items-center justify-center text-slate-500 font-mono text-[10px] sm:text-xs text-center">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-8 h-8 mb-2 text-slate-600">
         <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 5.25h16.5m-16.5-10.5h16.5" />
       </svg>

@@ -89,4 +89,26 @@ export class TrackSearch {
     const s = Math.floor(sec % 60);
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   }
+
+  /**
+   * Descarga la canción seleccionada directamente al ordenador del usuario
+   */
+  public async downloadSingleTrack(videoId: string, title: string): Promise<void> {
+    this.mixer.showToast(`Iniciando descarga directa de "${title}"...`, 'info', 4000);
+    try {
+      const audioBlob = await this.spotifyYoutube.downloadAudioTrack(videoId);
+      
+      const url = window.URL.createObjectURL(audioBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${title}.mp3`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+      
+      this.mixer.showToast(`¡Descarga de "${title}" completada con éxito!`, 'success');
+    } catch (e) {
+      console.error('Error en descarga directa:', e);
+      this.mixer.showToast(`No se pudo descargar "${title}". Inténtalo de nuevo más tarde.`, 'error');
+    }
+  }
 }
