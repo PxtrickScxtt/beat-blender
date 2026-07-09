@@ -211,9 +211,9 @@ app.get('/api/audio/:videoId', async (req, res) => {
             resolveStream(false);
             return;
           }
-          const contentLength = parseInt(audioRes.headers['content-length'] || '0');
-          if (contentLength > 0 && contentLength < 10000) {
-            console.warn(`[COBALT] Content-length sospechosamente pequeño desde ${host}: ${contentLength}`);
+          const contentLength = parseInt(audioRes.headers['content-length'] || '-1');
+          if (contentLength === 0 || (contentLength > 0 && contentLength < 10000)) {
+            console.warn(`[COBALT] Content-length sospechosamente pequeño o vacío desde ${host}: ${contentLength}`);
             audioRes.resume();
             resolveStream(false);
             return;
