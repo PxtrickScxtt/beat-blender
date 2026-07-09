@@ -15,6 +15,8 @@ export interface Track {
   duration: number; // Duración total original en segundos
   crossfadeTime: number; // Tiempo de crossfade en segundos (por defecto 5)
   source: 'youtube' | 'spotify' | 'local';
+  downloadStatus?: 'pending' | 'downloading' | 'completed' | 'failed';
+  downloadProgress?: number;
 }
 
 @Injectable({
@@ -221,76 +223,108 @@ export class MixerService {
   }
 
   /**
-   * Agrega una pista a la cola. Si es de YouTube/Spotify, descarga el audio automáticamente
-   * en segundo plano y la carga como archivo local en memoria para permitir renderizado offline instantáneo.
+   * Agrega una pista a la cola inmediatamente y arranca la descarga en segundo plano.
+   * Esto permite añadir y descargar múltiples pistas en paralelo.
    */
   public async addTrack(video: { id: string; title: string; artist: string; thumbnail: string; duration: number; source: 'youtube' | 'spotify' }): Promise<void> {
     const duration = video.duration || 300;
+    const trackId = Math.random().toString(36).substring(2, 9);
     
-    this.isDownloadingTrack.set(true);
-    this.downloadProgress.set(15);
+    // 1. Crear track inmediatamente en la cola con estado 'downloading'
+    const newTrack: Track = {
+      id: trackId,
+      videoId: video.id,
+      title: video.title,
+      artist: video.artist,
+      thumbnail: video.thumbnail,
+      startMinutes: 0,
+      startSeconds: 0,
+      endMinutes: Math.floor(duration / 60),
+      endSeconds: Math.floor(duration % 60),
+      duration: duration,
+      crossfadeTime: 5,
+      source: video.source,
+      downloadStatus: 'downloading',
+      downloadProgress: 15
+    };
+
+    this.queue.update(q => [...q, newTrack]);
+    this.saveQueueToLocalStorage();
+
+    // Iniciar reproducción si es el primer track
+    if (this.queue().length > 0 && this.currentIndex() === -1) {
+      this.currentIndex.set(0);
+      this.preloadTrackOnPlayer('A', this.queue()[0]);
+    } else if (this.queue().length === this.currentIndex() + 2) {
+      // Si acabamos de añadir la canción que le toca sonar JUSTO después de la actual
+      const nextPlay = this.activePlayer() === 'A' ? 'B' : 'A';
+      this.preloadTrackOnPlayer(nextPlay, this.queue()[this.currentIndex() + 1]);
+    }
+
+    // 2. Disparar descarga asíncrona en segundo plano sin bloquear
+    this.downloadTrackAsync(trackId, video.id, video.title);
+  }
+
+  /**
+   * Proceso de descarga en segundo plano para una pista en la cola
+   */
+  private async downloadTrackAsync(trackId: string, videoId: string, title: string): Promise<void> {
+    const updateProgress = (progress: number) => {
+      this.queue.update(q => q.map(t => t.id === trackId ? { ...t, downloadProgress: progress } : t));
+    };
 
     try {
-      this.downloadProgress.set(30);
-      // Descargar el audio en segundo plano a través de proxies Invidious
-      const audioBlob = await this.spotifyYoutube.downloadAudioTrack(video.id);
-      this.downloadProgress.set(70);
+      updateProgress(30);
+      const audioBlob = await this.spotifyYoutube.downloadAudioTrack(videoId);
+      updateProgress(70);
 
-      // Crear un archivo virtual File a partir del Blob
-      const file = new File([audioBlob], `${video.title}.m4a`, { type: 'audio/mp4' });
-      this.downloadProgress.set(90);
+      // Crear archivo virtual
+      const file = new File([audioBlob], `${title}.m4a`, { type: 'audio/mp4' });
+      updateProgress(90);
 
-      // Añadir como track local con metadatos reales
-      this.addLocalTrack(file, duration, {
-        title: video.title,
-        artist: video.artist,
-        thumbnail: video.thumbnail
-      });
+      // Registrar el archivo File en el mapa local de memoria
+      this.localFilesMap.set(trackId, file);
 
-      this.downloadProgress.set(100);
-      setTimeout(() => {
-        this.isDownloadingTrack.set(false);
-      }, 800);
-
-    } catch (e) {
-      console.warn('La descarga automática falló, agregando como track online normal:', e);
-      this.isDownloadingTrack.set(false);
-      this.downloadProgress.set(0);
-
-      // FALLBACK: Añadir como track normal de YouTube online
-      const newTrack: Track = {
-        id: Math.random().toString(36).substring(2, 9),
-        videoId: video.id,
-        title: video.title,
-        artist: video.artist,
-        thumbnail: video.thumbnail,
-        startMinutes: 0,
-        startSeconds: 0,
-        endMinutes: Math.floor(duration / 60),
-        endSeconds: Math.floor(duration % 60),
-        duration: duration,
-        crossfadeTime: 5,
-        source: video.source
-      };
-
-      this.queue.update(q => [...q, newTrack]);
+      // Actualizar estado del track a local y completado
+      this.queue.update(q => q.map(t => t.id === trackId ? { 
+        ...t, 
+        source: 'local', 
+        downloadStatus: 'completed', 
+        downloadProgress: 100 
+      } : t));
       this.saveQueueToLocalStorage();
 
-      if (this.queue().length > 0 && this.currentIndex() === -1) {
-        this.currentIndex.set(0);
-        this.preloadTrackOnPlayer('A', this.queue()[0]);
-      } else if (this.queue().length === this.currentIndex() + 2) {
-        // Si acabamos de añadir la canción que le toca sonar JUSTO después de la actual, precargarla de inmediato
-        const nextPlay = this.activePlayer() === 'A' ? 'B' : 'A';
-        this.preloadTrackOnPlayer(nextPlay, this.queue()[this.currentIndex() + 1]);
+      // Recargar el reproductor si esta pista ya debería estar sonando o precargada
+      if (this.currentIndex() !== -1) {
+        const currentTrack = this.queue()[this.currentIndex()];
+        const nextTrack = this.queue()[this.currentIndex() + 1];
+        if (currentTrack && currentTrack.id === trackId) {
+          this.preloadTrackOnPlayer(this.activePlayer(), currentTrack);
+        } else if (nextTrack && nextTrack.id === trackId) {
+          const nextPlay = this.activePlayer() === 'A' ? 'B' : 'A';
+          this.preloadTrackOnPlayer(nextPlay, nextTrack);
+        }
       }
 
+      this.showToast(`¡Descargada con éxito: "${title}"!`, 'success', 4000);
+
+    } catch (e) {
+      console.warn(`[DESCARGA] Falló background download para ${title}:`, e);
+      
+      // Pasar a modo online / fallido
+      this.queue.update(q => q.map(t => t.id === trackId ? { 
+        ...t, 
+        downloadStatus: 'failed', 
+        downloadProgress: 0 
+      } : t));
+      this.saveQueueToLocalStorage();
+
       this.showToast(
-        'Los servidores proxy de descarga están saturados. La canción se añadió en modo "Online". Puede reintentar la descarga.',
+        `Error de descarga para "${title}". Queda en modo "Online". Puedes reintentar.`,
         'error',
-        10000,
+        12000,
         'REINTENTAR',
-        () => this.retryDownloadTrack(newTrack.id)
+        () => this.retryDownloadTrack(trackId)
       );
     }
   }
@@ -303,26 +337,36 @@ export class MixerService {
     if (!track || track.source === 'local') return;
 
     this.retryingTrackId.set(trackId);
-    this.isDownloadingTrack.set(true);
-    this.downloadProgress.set(15);
+    
+    // Marcar de nuevo en estado de descarga
+    this.queue.update(q => q.map(t => t.id === trackId ? { 
+      ...t, 
+      downloadStatus: 'downloading', 
+      downloadProgress: 15 
+    } : t));
 
     try {
-      this.downloadProgress.set(30);
+      const updateProgress = (progress: number) => {
+        this.queue.update(q => q.map(t => t.id === trackId ? { ...t, downloadProgress: progress } : t));
+      };
+
+      updateProgress(30);
       const audioBlob = await this.spotifyYoutube.downloadAudioTrack(track.videoId);
-      this.downloadProgress.set(70);
+      updateProgress(70);
 
-      // Crear un archivo virtual
       const file = new File([audioBlob], `${track.title}.m4a`, { type: 'audio/mp4' });
-      this.downloadProgress.set(90);
+      updateProgress(90);
 
-      // Registrar en el mapa local
-      this.localFilesMap.set(track.id, file);
+      this.localFilesMap.set(trackId, file);
 
-      // Actualizar a local en la lista
-      this.queue.update(q => q.map(t => t.id === trackId ? { ...t, source: 'local' } : t));
+      this.queue.update(q => q.map(t => t.id === trackId ? { 
+        ...t, 
+        source: 'local', 
+        downloadStatus: 'completed', 
+        downloadProgress: 100 
+      } : t));
       this.saveQueueToLocalStorage();
 
-      // Forzar recarga en el reproductor si está en cola de reproducción
       if (this.currentIndex() !== -1) {
         const currentTrack = this.queue()[this.currentIndex()];
         const nextTrack = this.queue()[this.currentIndex() + 1];
@@ -334,18 +378,19 @@ export class MixerService {
         }
       }
 
-      this.downloadProgress.set(100);
+      this.retryingTrackId.set(null);
       this.showToast(`¡Pista "${track.title}" descargada con éxito!`, 'success');
       
-      setTimeout(() => {
-        this.isDownloadingTrack.set(false);
-        this.retryingTrackId.set(null);
-      }, 800);
-
     } catch (e) {
       console.warn('Re-descarga fallida:', e);
-      this.isDownloadingTrack.set(false);
-      this.downloadProgress.set(0);
+      
+      this.queue.update(q => q.map(t => t.id === trackId ? { 
+        ...t, 
+        downloadStatus: 'failed', 
+        downloadProgress: 0 
+      } : t));
+      this.saveQueueToLocalStorage();
+
       this.retryingTrackId.set(null);
       this.showToast(
         'Los servidores proxy siguen saturados. No se pudo descargar en este momento.',

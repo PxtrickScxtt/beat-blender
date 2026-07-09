@@ -68,6 +68,8 @@ export class TrackSearch {
    * Agrega el track seleccionado a la cola del mezclador
    */
   public addTrack(result: SearchResult): void {
+    this.mixer.showToast(`Añadiendo "${result.title}" a la lista...`, 'info', 3000);
+    
     this.mixer.addTrack({
       id: result.id,
       title: result.title,
@@ -76,8 +78,6 @@ export class TrackSearch {
       duration: result.duration,
       source: result.source
     });
-    
-    this.onTrackAdded.emit();
   }
 
   /**

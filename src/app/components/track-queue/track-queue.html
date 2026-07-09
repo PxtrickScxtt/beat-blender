@@ -108,15 +108,29 @@
               <p class="text-[10px] text-slate-400 truncate mt-0.5">{{ track.artist }}</p>
               
               <div class="flex items-center gap-2 mt-1">
-                @if (track.source === 'local') {
-                  <span class="text-[8px] bg-purple-950 text-purple-400 border border-purple-900 px-1 rounded-sm">Local File</span>
-                } @else if (track.source === 'spotify') {
-                  <span class="text-[8px] bg-emerald-950 text-emerald-400 border border-emerald-800 px-1 rounded-sm">Spotify</span>
+                @if (track.downloadStatus === 'downloading') {
+                  <!-- Barra de Progreso de Descarga Individual -->
+                  <div class="flex items-center space-x-2 flex-1 max-w-[120px] sm:max-w-[160px]">
+                    <div class="h-1 w-full bg-slate-950 border border-slate-800 rounded-full overflow-hidden">
+                      <div class="h-full bg-dj-neon-cyan transition-all duration-300" [style.width.%]="track.downloadProgress || 15"></div>
+                    </div>
+                    <span class="text-[8px] font-mono text-slate-400">{{ track.downloadProgress || 15 }}%</span>
+                  </div>
                 } @else {
-                  <span class="text-[8px] bg-red-950 text-red-400 border border-red-900 px-1 rounded-sm">YouTube</span>
+                  @if (track.source === 'local') {
+                    <span class="text-[8px] bg-purple-950 text-purple-400 border border-purple-900 px-1 rounded-sm">Local File</span>
+                  } @else if (track.source === 'spotify') {
+                    <span class="text-[8px] bg-emerald-950 text-emerald-400 border border-emerald-800 px-1 rounded-sm">Spotify</span>
+                  } @else {
+                    <span class="text-[8px] bg-red-950 text-red-400 border border-red-900 px-1 rounded-sm">YouTube</span>
+                  }
+
+                  @if (track.downloadStatus === 'failed') {
+                    <span class="text-[8px] bg-amber-950 text-amber-400 border border-amber-900/60 px-1 rounded-sm" title="Descarga local fallida. Se reproducirá online.">Online</span>
+                  }
                 }
                 
-                @if (track.source !== 'local') {
+                @if (track.source !== 'local' && track.downloadStatus !== 'downloading') {
                   <button 
                     (click)="mixer.retryDownloadTrack(track.id)" 
                     [disabled]="mixer.retryingTrackId() !== null"
