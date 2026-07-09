@@ -81,6 +81,8 @@ function getYtdlpBaseArgs() {
     '--no-warnings',
     '--no-check-certificates',
     '--geo-bypass',
+    '--socket-timeout', '5',
+    '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     '--proxy', proxy,
     // web_creator no requiere PO token y funciona desde IPs de servidores cloud
     '--extractor-args', 'youtube:player_client=web_creator',
@@ -183,7 +185,7 @@ app.get('/api/audio/:videoId', async (req, res) => {
   const doYtdlp = (onDone) => {
     const args = ['--no-playlist', ...getYtdlpBaseArgs(), '-o', outputFile, ytUrl];
     console.log(`[yt-dlp] Ejecutando: yt-dlp ${args.join(' ')}`);
-    execFile(YT_DLP, args, { timeout: 120000, maxBuffer: 1024 * 1024 * 50 }, (error) => {
+    execFile(YT_DLP, args, { timeout: 15000, maxBuffer: 1024 * 1024 * 50 }, (error) => {
       if (error) { onDone(error, null); return; }
       const files = fs.readdirSync(tmpDir).filter(f => f.startsWith(filePrefix));
       if (files.length === 0) { onDone(new Error('Archivo no encontrado'), null); return; }
