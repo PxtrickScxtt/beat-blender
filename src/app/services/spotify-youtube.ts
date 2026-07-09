@@ -205,7 +205,12 @@ export class SpotifyYoutubeService {
       const metadata = await this.getSpotifyMetadata(query);
       if (metadata) {
         // Buscar el equivalente en YouTube
-        const searchQuery = metadata.artist && metadata.artist !== 'Artista Desconocido'
+        const isUnknown = (artist: string | undefined | null) => {
+          if (!artist) return true;
+          const lower = artist.toLowerCase();
+          return lower.includes('desconocido') || lower.includes('unknown');
+        };
+        const searchQuery = metadata.artist && !isUnknown(metadata.artist)
           ? `${metadata.artist} ${metadata.title}`
           : metadata.title;
         const youtubeResults = await this.searchYoutubeApi(searchQuery);
