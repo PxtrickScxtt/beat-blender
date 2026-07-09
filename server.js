@@ -223,7 +223,56 @@ app.get('/api/audio/:videoId', async (req, res) => {
 
   if (ytdlpSuccess) return;
 
-  // === ESTRATEGIA 2: SaveNow API (loader.to Backend - Fallback) ===
+  // === ESTRATEGIA 2: cobalt.tools (Instancias Públicas Rotativas - Fallback) ===
+  const cobaltHosts = [
+    'cblt.fariz.dev',
+    'rue-cobalt.xenon.zone',
+    'dog.kittycat.boo',
+    'cobaltapi.kittycat.boo',
+    'cobaltapi.cjs.nz'
+  ];
+
+  let cobaltSuccess = false;
+  for (const host of cobaltHosts) {
+    try {
+      console.log(`[COBALT] Intentando con instancia: ${host}...`);
+      const cobaltUrl = await downloadViaCobalt(videoId, host);
+      console.log(`[COBALT] URL obtenida desde ${host}, haciendo stream...`);
+      const https2 = require('https');
+      const http2 = require('http');
+      const client = cobaltUrl.startsWith('https') ? https2 : http2;
+      
+      const success = await new Promise((resolveStream) => {
+        client.get(cobaltUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (audioRes) => {
+          if (audioRes.statusCode !== 200) {
+            console.warn(`[COBALT] Stream desde ${host} devolvió status ${audioRes.statusCode}`);
+            resolveStream(false);
+            return;
+          }
+          console.log(`[COBALT] Stream exitoso desde ${host}`);
+          res.setHeader('Content-Type', audioRes.headers['content-type'] || 'audio/mp4');
+          if (audioRes.headers['content-length']) res.setHeader('Content-Length', audioRes.headers['content-length']);
+          res.setHeader('Content-Disposition', `attachment; filename="${videoId}.m4a"`);
+          audioRes.pipe(res);
+          resolveStream(true);
+        }).on('error', (err) => {
+          console.error(`[COBALT] Error de stream en ${host}:`, err.message);
+          resolveStream(false);
+        });
+      });
+
+      if (success) {
+        cobaltSuccess = true;
+        break;
+      }
+    } catch (cobaltErr) {
+      console.warn(`[COBALT] Instancia ${host} falló: ${cobaltErr.message}`);
+    }
+  }
+
+  if (cobaltSuccess) return;
+
+  // === ESTRATEGIA 3: SaveNow API (loader.to Backend - Fallback) ===
   let saveNowSuccess = false;
   try {
     console.log(`[SAVENOW] Intentando SaveNow...`);
@@ -256,49 +305,6 @@ app.get('/api/audio/:videoId', async (req, res) => {
   }
 
   if (saveNowSuccess) return;
-
-  // === ESTRATEGIA 3: cobalt.tools (Instancias Públicas Rotativas - Fallback) ===
-  const cobaltHosts = [
-    'cblt.fariz.dev',
-    'rue-cobalt.xenon.zone',
-    'dog.kittycat.boo',
-    'cobaltapi.kittycat.boo',
-    'cobaltapi.cjs.nz'
-  ];
-
-  for (const host of cobaltHosts) {
-    try {
-      console.log(`[COBALT] Intentando con instancia: ${host}...`);
-      const cobaltUrl = await downloadViaCobalt(videoId, host);
-      console.log(`[COBALT] URL obtenida desde ${host}, haciendo stream...`);
-      const https2 = require('https');
-      const http2 = require('http');
-      const client = cobaltUrl.startsWith('https') ? https2 : http2;
-      
-      const success = await new Promise((resolveStream) => {
-        client.get(cobaltUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (audioRes) => {
-          if (audioRes.statusCode !== 200) {
-            console.warn(`[COBALT] Stream desde ${host} devolvió status ${audioRes.statusCode}`);
-            resolveStream(false);
-            return;
-          }
-          console.log(`[COBALT] Stream exitoso desde ${host}`);
-          res.setHeader('Content-Type', audioRes.headers['content-type'] || 'audio/mp4');
-          if (audioRes.headers['content-length']) res.setHeader('Content-Length', audioRes.headers['content-length']);
-          res.setHeader('Content-Disposition', `attachment; filename="${videoId}.m4a"`);
-          audioRes.pipe(res);
-          resolveStream(true);
-        }).on('error', (err) => {
-          console.error(`[COBALT] Error de stream en ${host}:`, err.message);
-          resolveStream(false);
-        });
-      });
-
-      if (success) return; // Terminado con éxito
-    } catch (cobaltErr) {
-      console.warn(`[COBALT] Instancia ${host} falló: ${cobaltErr.message}`);
-    }
-  }
 
   // Si todo lo demás falla, responder error
   if (!res.headersSent) {
