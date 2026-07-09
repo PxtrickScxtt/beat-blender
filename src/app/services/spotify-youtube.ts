@@ -51,7 +51,7 @@ export class SpotifyYoutubeService {
     try {
       const localProxyUrl = `${this.proxyUrl}/api/audio/${videoId}`;
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s para canciones largas
+      const timeoutId = setTimeout(() => controller.abort(), 180000); // 180s (3 minutos) para dar margen a arranques en frío de Render y fallbacks.
 
       const response = await fetch(localProxyUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
