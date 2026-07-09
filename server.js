@@ -191,27 +191,40 @@ app.get('/api/audio/:videoId', async (req, res) => {
     });
   };
 
-  // === ESTRATEGIA 0: @distube/ytdl-core (sin PO token, sin yt-dlp) ===
-  if (ytdl && ytdl.validateID(videoId)) {
-    try {
-      console.log(`[YTDL] Intentando @distube/ytdl-core...`);
-      const info = await ytdl.getInfo(ytUrl);
-      const audioFormat = ytdl.chooseFormat(info.formats, { quality: 'highestaudio', filter: 'audioonly' })
-        || ytdl.chooseFormat(info.formats, { quality: 'highest' });
-      if (audioFormat) {
-        console.log(`[YTDL] Formato: ${audioFormat.mimeType} ${audioFormat.audioBitrate}kbps`);
-        res.setHeader('Content-Type', audioFormat.mimeType?.split(';')[0] || 'audio/mp4');
-        if (audioFormat.contentLength) res.setHeader('Content-Length', audioFormat.contentLength);
-        res.setHeader('Content-Disposition', `attachment; filename="${videoId}.m4a"`);
-        ytdl(ytUrl, { format: audioFormat }).pipe(res);
+  // === ESTRATEGIA 1: yt-dlp (Con proxies rotativos - Altamente fiable) ===
+  const ytdlpSuccess = await new Promise((resolveYtdlp) => {
+    doYtdlp((err, filePath) => {
+      if (err || !filePath) {
+        console.error(`[yt-dlp] Falló:`, err?.message || 'Ruta vacía. Probando fallbacks...');
+        resolveYtdlp(false);
         return;
       }
-    } catch (ytdlErr) {
-      console.warn(`[YTDL] Fallo: ${ytdlErr.message}. Probando cobalt...`);
-    }
-  }
+      try {
+        const stat = fs.statSync(filePath);
+        console.log(`[yt-dlp] Éxito: ${filePath} (${(stat.size/1024/1024).toFixed(2)} MB)`);
+        res.setHeader('Content-Type', 'audio/mp4');
+        res.setHeader('Content-Length', stat.size);
+        res.setHeader('Content-Disposition', `attachment; filename="${videoId}.m4a"`);
+        const s = fs.createReadStream(filePath);
+        s.pipe(res);
+        s.on('end', () => { 
+          try { fs.unlinkSync(filePath); } catch(e){}
+          resolveYtdlp(true);
+        });
+        s.on('error', (streamErr) => {
+          console.error('[yt-dlp] Error de lectura del stream:', streamErr.message);
+          resolveYtdlp(false);
+        });
+      } catch (statErr) {
+        console.error('[yt-dlp] Error leyendo stats/archivo:', statErr.message);
+        resolveYtdlp(false);
+      }
+    });
+  });
 
-  // === ESTRATEGIA 1: cobalt.tools (Instancias Públicas Rotativas) ===
+  if (ytdlpSuccess) return;
+
+  // === ESTRATEGIA 2: cobalt.tools (Instancias Públicas Rotativas - Fallback) ===
   const cobaltHosts = [
     'cblt.fariz.dev',
     'rue-cobalt.xenon.zone',
@@ -254,7 +267,7 @@ app.get('/api/audio/:videoId', async (req, res) => {
     }
   }
 
-  // === ESTRATEGIA 1.5: SaveNow API (loader.to Backend) ===
+  // === ESTRATEGIA 3: SaveNow API (loader.to Backend - Fallback) ===
   try {
     console.log(`[SAVENOW] Intentando SaveNow...`);
     const downloadUrl = await downloadViaSaveNow(videoId);
@@ -284,23 +297,13 @@ app.get('/api/audio/:videoId', async (req, res) => {
 
     if (success) return;
   } catch (saveNowErr) {
-    console.warn(`[SAVENOW] Falló: ${saveNowErr.message}. Cayendo en yt-dlp...`);
+    console.warn(`[SAVENOW] Falló: ${saveNowErr.message}.`);
   }
 
-  // === ESTRATEGIA 2: yt-dlp ===
-  doYtdlp((err, filePath) => {
-    if (err || !filePath) {
-      console.error(`[ERROR] yt-dlp fallo:`, err?.message);
-      if (!res.headersSent) return res.status(500).json({ error: `No se pudo descargar: ${err?.message}` });
-      return;
-    }
-    const stat = fs.statSync(filePath);
-    console.log(`[yt-dlp] Archivo: ${filePath} (${(stat.size/1024/1024).toFixed(2)} MB)`);
-    res.setHeader('Content-Type', 'audio/mp4'); res.setHeader('Content-Length', stat.size);
-    res.setHeader('Content-Disposition', `attachment; filename="${videoId}.m4a"`);
-    const s = fs.createReadStream(filePath); s.pipe(res);
-    s.on('end', () => { try { fs.unlinkSync(filePath); } catch(e){} });
-  });
+  // Si todo lo demás falla, responder error
+  if (!res.headersSent) {
+    res.status(500).json({ error: "Todos los motores de descarga fallaron en este servidor." });
+  }
 });
 
 /**
