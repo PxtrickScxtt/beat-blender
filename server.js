@@ -319,11 +319,7 @@ app.get('/api/audio/:videoId', async (req, res) => {
         break;
       }
     } catch (cobaltErr) {
-      if (cobaltErr.message.includes('error.api.youtube.login')) {
-        console.warn(`[COBALT] Instancia ${host} bloqueada temporalmente por requerimiento de login de YouTube.`);
-      } else {
-        console.warn(`[COBALT] Instancia ${host} falló: ${cobaltErr.message}`);
-      }
+      console.warn(`[COBALT] Instancia ${host} falló: ${cobaltErr.message}`);
     }
   }
 
