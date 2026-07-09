@@ -44,42 +44,70 @@ export class SpotifyYoutubeService {
    * 2. Piped API (fallback público con CORS nativo)
    * 3. Invidious + proxy CORS externo (último recurso)
    */
-  public async downloadAudioTrack(videoId: string): Promise<Blob> {
+  public async downloadAudioTrack(videoId: string, onProgress?: (p: number) => void): Promise<Blob> {
     // ═══════════════════════════════════════════════════════════════
-    // 1. SERVIDOR PROXY LOCAL (MÁS FIABLE - Audio real de YouTube)
+    // 1. SERVIDOR PROXY LOCAL / PRODUCTION PROXY (Audio real de YouTube)
     // ═══════════════════════════════════════════════════════════════
     try {
       const localProxyUrl = `${this.proxyUrl}/api/audio/${videoId}`;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 180000); // 180s (3 minutos) para dar margen a arranques en frío de Render y fallbacks.
-
+ 
       const response = await fetch(localProxyUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
-
+ 
       if (response.ok) {
-        const blob = await response.blob();
-        if (blob && blob.size > 50000) {
-          console.log(`✅ Audio descargado vía proxy local (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
-          return blob;
+        const contentLength = response.headers.get('content-length');
+        const total = contentLength ? parseInt(contentLength, 10) : 0;
+        
+        if (!response.body || total === 0) {
+          // Fallback en caso de que no soporte ReadableStream o no tenga content-length
+          const blob = await response.blob();
+          if (blob && blob.size > 50000) {
+            console.log(`✅ Audio descargado vía proxy local (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
+            return blob;
+          }
+        } else {
+          const reader = response.body.getReader();
+          let loaded = 0;
+          const chunks = [];
+          
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            chunks.push(value);
+            loaded += value.byteLength;
+            
+            if (onProgress && total > 0) {
+              const percent = Math.round((loaded / total) * 100);
+              onProgress(percent);
+            }
+          }
+          
+          const blob = new Blob(chunks);
+          if (blob && blob.size > 50000) {
+            console.log(`✅ Audio descargado vía proxy local con progress tracking (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
+            return blob;
+          }
         }
       }
     } catch (e) {
       console.warn('⚠️ Proxy local no disponible, intentando fallbacks...', e);
     }
-
+ 
     // ═══════════════════════════════════════════════════════════════
     // 1.5 FALLBACK DIRECTO: COBALT DESDE EL NAVEGADOR (Bypass IP del Servidor)
     // ═══════════════════════════════════════════════════════════════
     const cobaltHosts = [
-      'cobalt.privacydev.net',
-      'cobalt.hpko.xyz',
       'cblt.fariz.dev',
+      'cobalt.hpko.xyz',
       'cobaltapi.cjs.nz',
-      'cobalt.mr-r.xyz',
       'cobalt.drgns.space',
-      'rue-cobalt.xenon.zone'
+      'rue-cobalt.xenon.zone',
+      'cobalt.synesthesiam.com'
     ];
-
+ 
     for (const host of cobaltHosts) {
       try {
         console.log(`[FRONTEND-COBALT] Intentando con instancia: ${host}...`);
@@ -98,7 +126,7 @@ export class SpotifyYoutubeService {
             audioOnly: true
           })
         });
-
+ 
         if (apiResponse.ok) {
           const json = await apiResponse.json();
           if (json.url) {
@@ -106,10 +134,38 @@ export class SpotifyYoutubeService {
             
             const audioResponse = await fetch(json.url);
             if (audioResponse.ok) {
-              const blob = await audioResponse.blob();
-              if (blob && blob.size > 50000) {
-                console.log(`✅ Audio descargado vía Cobalt directo en el navegador desde ${host} (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
-                return blob;
+              const contentLength = audioResponse.headers.get('content-length');
+              const total = contentLength ? parseInt(contentLength, 10) : 0;
+              
+              if (!audioResponse.body || total === 0) {
+                const blob = await audioResponse.blob();
+                if (blob && blob.size > 50000) {
+                  console.log(`✅ Audio descargado vía Cobalt directo en el navegador desde ${host} (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
+                  return blob;
+                }
+              } else {
+                const reader = audioResponse.body.getReader();
+                let loaded = 0;
+                const chunks = [];
+                
+                while (true) {
+                  const { done, value } = await reader.read();
+                  if (done) break;
+                  
+                  chunks.push(value);
+                  loaded += value.byteLength;
+                  
+                  if (onProgress && total > 0) {
+                    const percent = Math.round((loaded / total) * 100);
+                    onProgress(percent);
+                  }
+                }
+                
+                const blob = new Blob(chunks);
+                if (blob && blob.size > 50000) {
+                  console.log(`✅ Audio descargado vía Cobalt directo con progress tracking desde ${host} (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
+                  return blob;
+                }
               }
             }
           }

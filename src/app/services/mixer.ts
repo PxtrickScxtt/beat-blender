@@ -281,8 +281,10 @@ export class MixerService {
 
     try {
       updateProgress(30);
-      const audioBlob = await this.spotifyYoutube.downloadAudioTrack(videoId);
-      updateProgress(70);
+      const audioBlob = await this.spotifyYoutube.downloadAudioTrack(videoId, (p) => {
+        updateProgress(Math.round(30 + p * 0.45));
+      });
+      updateProgress(75);
 
       // Crear archivo virtual
       const file = new File([audioBlob], `${title}.m4a`, { type: 'audio/mp4' });
@@ -357,8 +359,10 @@ export class MixerService {
       };
 
       updateProgress(30);
-      const audioBlob = await this.spotifyYoutube.downloadAudioTrack(track.videoId);
-      updateProgress(70);
+      const audioBlob = await this.spotifyYoutube.downloadAudioTrack(track.videoId, (p) => {
+        updateProgress(Math.round(30 + p * 0.45));
+      });
+      updateProgress(75);
 
       const file = new File([audioBlob], `${track.title}.m4a`, { type: 'audio/mp4' });
       updateProgress(90);
