@@ -25,6 +25,17 @@ export class SpotifyYoutubeService {
     'https://invidious.namazso.eu'
   ];
 
+  // Dirección del servidor proxy (dinámica según el host de ejecución)
+  private get proxyUrl(): string {
+    if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname;
+      if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        return 'http://localhost:3001';
+      }
+    }
+    return 'https://beatblender-proxy.onrender.com';
+  }
+
   /**
    * Descarga la pista de audio real de un video de YouTube.
    * 
@@ -38,7 +49,7 @@ export class SpotifyYoutubeService {
     // 1. SERVIDOR PROXY LOCAL (MÁS FIABLE - Audio real de YouTube)
     // ═══════════════════════════════════════════════════════════════
     try {
-      const localProxyUrl = `https://beatblender-proxy.onrender.com/api/audio/${videoId}`;
+      const localProxyUrl = `${this.proxyUrl}/api/audio/${videoId}`;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s para canciones largas
 
@@ -238,7 +249,7 @@ export class SpotifyYoutubeService {
   private async searchYoutubeApi(query: string): Promise<SearchResult[]> {
     // 1. INTENTAR CON EL PROXY LOCAL PRIMERO (Más rápido y sin bloqueos)
     try {
-      const localProxyUrl = `https://beatblender-proxy.onrender.com/api/search/${encodeURIComponent(query)}`;
+      const localProxyUrl = `${this.proxyUrl}/api/search/${encodeURIComponent(query)}`;
       const response = await fetch(localProxyUrl);
       if (response.ok) {
         const data = await response.json();
