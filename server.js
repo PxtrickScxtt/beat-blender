@@ -179,7 +179,42 @@ app.get('/api/audio/:videoId', async (req, res) => {
 
   console.log(`[DESCARGA] Iniciando: ${videoId}`);
 
-  // === ESTRATEGIA 1: cobalt.tools (Instancias Públicas Rotativas - Más fiable en IPs cloud) ===
+  // === ESTRATEGIA 1: SaveNow API (loader.to Backend - Primer recurso por velocidad y fiabilidad en cloud) ===
+  let saveNowSuccess = false;
+  try {
+    console.log(`[SAVENOW] Intentando SaveNow...`);
+    const downloadUrl = await downloadViaSaveNow(videoId);
+    console.log(`[SAVENOW] URL de descarga obtenida: ${downloadUrl}`);
+    const https3 = require('https');
+    const http3 = require('http');
+    const client = downloadUrl.startsWith('https') ? https3 : http3;
+    
+    saveNowSuccess = await new Promise((resolveStream) => {
+      client.get(downloadUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (audioRes) => {
+        if (audioRes.statusCode !== 200) {
+          console.warn(`[SAVENOW] Stream devolvió status ${audioRes.statusCode}`);
+          audioRes.resume();
+          resolveStream(false);
+          return;
+        }
+        console.log(`[SAVENOW] Stream exitoso`);
+        res.setHeader('Content-Type', audioRes.headers['content-type'] || 'audio/mpeg');
+        if (audioRes.headers['content-length']) res.setHeader('Content-Length', audioRes.headers['content-length']);
+        res.setHeader('Content-Disposition', `attachment; filename="${videoId}.mp3"`);
+        audioRes.pipe(res);
+        resolveStream(true);
+      }).on('error', (err) => {
+        console.error(`[SAVENOW] Error de stream:`, err.message);
+        resolveStream(false);
+      });
+    });
+  } catch (saveNowErr) {
+    console.warn(`[SAVENOW] Falló: ${saveNowErr.message}.`);
+  }
+
+  if (saveNowSuccess) return;
+
+  // === ESTRATEGIA 2: cobalt.tools (Instancias Públicas Rotativas - Fallback) ===
   const cobaltHosts = [
     'cobalt.privacydev.net',
     'cobalt.hpko.xyz',
@@ -191,6 +226,7 @@ app.get('/api/audio/:videoId', async (req, res) => {
     'rue-cobalt.xenon.zone'
   ];
 
+  let cobaltSuccess = false;
   for (const host of cobaltHosts) {
     try {
       console.log(`[COBALT] Intentando con instancia: ${host}...`);
@@ -239,14 +275,18 @@ app.get('/api/audio/:videoId', async (req, res) => {
         });
       });
 
-      if (success) return;
+      if (success) {
+        cobaltSuccess = true;
+        break;
+      }
     } catch (cobaltErr) {
       console.warn(`[COBALT] Instancia ${host} falló: ${cobaltErr.message}`);
     }
   }
 
-  // === ESTRATEGIA 2: yt-dlp con múltiples clientes (fallback) ===
-  // Intentar con diferentes player_clients en orden de compatibilidad cloud
+  if (cobaltSuccess) return;
+
+  // === ESTRATEGIA 3: yt-dlp con múltiples clientes (Último recurso) ===
   const ytdlpClients = ['mweb', 'web_creator', 'ios', 'android'];
 
   for (const playerClient of ytdlpClients) {
@@ -312,40 +352,6 @@ app.get('/api/audio/:videoId', async (req, res) => {
     });
 
     if (ytdlpSuccess) return;
-  }
-
-  // === ESTRATEGIA 3: SaveNow API (loader.to Backend - Último recurso) ===
-  try {
-    console.log(`[SAVENOW] Intentando SaveNow...`);
-    const downloadUrl = await downloadViaSaveNow(videoId);
-    console.log(`[SAVENOW] URL de descarga obtenida: ${downloadUrl}`);
-    const https3 = require('https');
-    const http3 = require('http');
-    const client = downloadUrl.startsWith('https') ? https3 : http3;
-    
-    const saveNowSuccess = await new Promise((resolveStream) => {
-      client.get(downloadUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (audioRes) => {
-        if (audioRes.statusCode !== 200) {
-          console.warn(`[SAVENOW] Stream devolvió status ${audioRes.statusCode}`);
-          audioRes.resume();
-          resolveStream(false);
-          return;
-        }
-        console.log(`[SAVENOW] Stream exitoso`);
-        res.setHeader('Content-Type', audioRes.headers['content-type'] || 'audio/mpeg');
-        if (audioRes.headers['content-length']) res.setHeader('Content-Length', audioRes.headers['content-length']);
-        res.setHeader('Content-Disposition', `attachment; filename="${videoId}.mp3"`);
-        audioRes.pipe(res);
-        resolveStream(true);
-      }).on('error', (err) => {
-        console.error(`[SAVENOW] Error de stream:`, err.message);
-        resolveStream(false);
-      });
-    });
-
-    if (saveNowSuccess) return;
-  } catch (saveNowErr) {
-    console.warn(`[SAVENOW] Falló: ${saveNowErr.message}.`);
   }
 
   // Si todo lo demás falla, responder error (NUNCA 200 con cuerpo vacío)
