@@ -153,7 +153,7 @@ async function downloadViaSaveNow(videoId) {
   const taskId = initData.id;
   const progressUrl = `https://p.savenow.to/api/progress?id=${taskId}`;
 
-  for (let i = 0; i < 20; i++) { // Max 40 segundos
+  for (let i = 0; i < 35; i++) { // Max 70 segundos para dar margen en conversiones lentas
     await new Promise(r => setTimeout(r, 2000));
     console.log(`[SAVENOW] Consultando progreso (intento ${i+1})...`);
     const progressData = await getJson(progressUrl);

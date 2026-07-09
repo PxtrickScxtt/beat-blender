@@ -64,7 +64,59 @@ export class SpotifyYoutubeService {
         }
       }
     } catch (e) {
-      console.warn('⚠️ Proxy local no disponible, intentando con Piped...', e);
+      console.warn('⚠️ Proxy local no disponible, intentando fallbacks...', e);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 1.5 FALLBACK DIRECTO: COBALT DESDE EL NAVEGADOR (Bypass IP del Servidor)
+    // ═══════════════════════════════════════════════════════════════
+    const cobaltHosts = [
+      'cobalt.privacydev.net',
+      'cobalt.hpko.xyz',
+      'cblt.fariz.dev',
+      'cobaltapi.cjs.nz',
+      'cobalt.mr-r.xyz',
+      'cobalt.drgns.space',
+      'rue-cobalt.xenon.zone'
+    ];
+
+    for (const host of cobaltHosts) {
+      try {
+        console.log(`[FRONTEND-COBALT] Intentando con instancia: ${host}...`);
+        const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
+        
+        const apiResponse = await fetch(`https://${host}/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            url: youtubeUrl,
+            downloadMode: 'audio',
+            audioFormat: 'best',
+            audioOnly: true
+          })
+        });
+
+        if (apiResponse.ok) {
+          const json = await apiResponse.json();
+          if (json.url) {
+            console.log(`[FRONTEND-COBALT] URL de audio obtenida desde ${host}: ${json.url}`);
+            
+            const audioResponse = await fetch(json.url);
+            if (audioResponse.ok) {
+              const blob = await audioResponse.blob();
+              if (blob && blob.size > 50000) {
+                console.log(`✅ Audio descargado vía Cobalt directo en el navegador desde ${host} (${(blob.size / 1024 / 1024).toFixed(2)} MB)`);
+                return blob;
+              }
+            }
+          }
+        }
+      } catch (cobaltErr: any) {
+        console.warn(`[FRONTEND-COBALT] Instancia ${host} falló: ${cobaltErr.message}`);
+      }
     }
 
     // ═══════════════════════════════════════════════════════════════
