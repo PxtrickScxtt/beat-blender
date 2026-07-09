@@ -83,6 +83,10 @@ export class MixerService {
   // Almacenamiento de archivos binarios locales
   private localFilesMap = new Map<string, File>();
 
+  // Cola de descargas secuencial para evitar saturar el servidor proxy
+  private downloadQueue: Array<{ trackId: string; videoId: string; title: string; isRetry: boolean }> = [];
+  private downloadInProgress = false;
+
   // Timers para monitorear el progreso y la mezcla
   private monitorInterval: any = null;
   private fadeInterval: any = null;
@@ -274,25 +278,54 @@ export class MixerService {
   /**
    * Proceso de descarga en segundo plano para una pista en la cola
    */
-  private async downloadTrackAsync(trackId: string, videoId: string, title: string): Promise<void> {
+  /**
+   * Encola una descarga de audio secuencialmente para evitar saturar el servidor proxy
+   */
+  private enqueueDownload(trackId: string, videoId: string, title: string, isRetry = false): void {
+    if (this.downloadQueue.some(item => item.trackId === trackId)) return;
+
+    if (isRetry) {
+      this.downloadQueue.unshift({ trackId, videoId, title, isRetry });
+    } else {
+      this.downloadQueue.push({ trackId, videoId, title, isRetry });
+    }
+
+    // Actualizar estado a 'downloading' y progreso inicial
+    this.queue.update(q => q.map(t => t.id === trackId ? { ...t, downloadStatus: 'downloading', downloadProgress: 15 } : t));
+    
+    this.processNextDownload();
+  }
+
+  /**
+   * Procesa la siguiente descarga en la cola secuencial
+   */
+  private async processNextDownload(): Promise<void> {
+    if (this.downloadInProgress || this.downloadQueue.length === 0) return;
+
+    this.downloadInProgress = true;
+    const task = this.downloadQueue[0];
+    if (task.isRetry) {
+      this.retryingTrackId.set(task.trackId);
+    }
+
     const updateProgress = (progress: number) => {
-      this.queue.update(q => q.map(t => t.id === trackId ? { ...t, downloadProgress: progress } : t));
+      this.queue.update(q => q.map(t => t.id === task.trackId ? { ...t, downloadProgress: progress } : t));
     };
 
     try {
       updateProgress(30);
-      const audioBlob = await this.spotifyYoutube.downloadAudioTrack(videoId);
+      const audioBlob = await this.spotifyYoutube.downloadAudioTrack(task.videoId);
       updateProgress(70);
 
       // Crear archivo virtual
-      const file = new File([audioBlob], `${title}.m4a`, { type: 'audio/mp4' });
+      const file = new File([audioBlob], `${task.title}.m4a`, { type: 'audio/mp4' });
       updateProgress(90);
 
       // Registrar el archivo File en el mapa local de memoria
-      this.localFilesMap.set(trackId, file);
+      this.localFilesMap.set(task.trackId, file);
 
       // Actualizar estado del track a local y completado
-      this.queue.update(q => q.map(t => t.id === trackId ? { 
+      this.queue.update(q => q.map(t => t.id === task.trackId ? { 
         ...t, 
         source: 'local', 
         downloadStatus: 'completed', 
@@ -304,35 +337,53 @@ export class MixerService {
       if (this.currentIndex() !== -1) {
         const currentTrack = this.queue()[this.currentIndex()];
         const nextTrack = this.queue()[this.currentIndex() + 1];
-        if (currentTrack && currentTrack.id === trackId) {
+        if (currentTrack && currentTrack.id === task.trackId) {
           this.preloadTrackOnPlayer(this.activePlayer(), currentTrack);
-        } else if (nextTrack && nextTrack.id === trackId) {
+        } else if (nextTrack && nextTrack.id === task.trackId) {
           const nextPlay = this.activePlayer() === 'A' ? 'B' : 'A';
           this.preloadTrackOnPlayer(nextPlay, nextTrack);
         }
       }
 
-      this.showToast(`¡Descargada con éxito: "${title}"!`, 'success', 4000);
+      if (task.isRetry) {
+        this.retryingTrackId.set(null);
+      }
+      this.showToast(`¡Descargada con éxito: "${task.title}"!`, 'success', 4000);
 
     } catch (e) {
-      console.warn(`[DESCARGA] Falló background download para ${title}:`, e);
+      console.warn(`[DESCARGA] Falló background download para ${task.title}:`, e);
       
       // Pasar a modo online / fallido
-      this.queue.update(q => q.map(t => t.id === trackId ? { 
+      this.queue.update(q => q.map(t => t.id === task.trackId ? { 
         ...t, 
         downloadStatus: 'failed', 
         downloadProgress: 0 
       } : t));
       this.saveQueueToLocalStorage();
 
+      if (task.isRetry) {
+        this.retryingTrackId.set(null);
+      }
+
       this.showToast(
-        `Error de descarga para "${title}". Queda en modo "Online". Puedes reintentar.`,
+        `Error de descarga para "${task.title}". Queda en modo "Online". Puedes reintentar.`,
         'error',
         12000,
         'REINTENTAR',
-        () => this.retryDownloadTrack(trackId)
+        () => this.retryDownloadTrack(task.trackId)
       );
+    } finally {
+      this.downloadQueue.shift(); // Quitar la tarea completada
+      this.downloadInProgress = false;
+      this.processNextDownload(); // Procesar la siguiente
     }
+  }
+
+  /**
+   * Proceso de descarga en segundo plano para una pista en la cola (Encolado secuencial)
+   */
+  private async downloadTrackAsync(trackId: string, videoId: string, title: string): Promise<void> {
+    this.enqueueDownload(trackId, videoId, title, false);
   }
 
   /**
@@ -341,71 +392,7 @@ export class MixerService {
   public async retryDownloadTrack(trackId: string): Promise<void> {
     const track = this.queue().find(t => t.id === trackId);
     if (!track || track.source === 'local') return;
-
-    this.retryingTrackId.set(trackId);
-    
-    // Marcar de nuevo en estado de descarga
-    this.queue.update(q => q.map(t => t.id === trackId ? { 
-      ...t, 
-      downloadStatus: 'downloading', 
-      downloadProgress: 15 
-    } : t));
-
-    try {
-      const updateProgress = (progress: number) => {
-        this.queue.update(q => q.map(t => t.id === trackId ? { ...t, downloadProgress: progress } : t));
-      };
-
-      updateProgress(30);
-      const audioBlob = await this.spotifyYoutube.downloadAudioTrack(track.videoId);
-      updateProgress(70);
-
-      const file = new File([audioBlob], `${track.title}.m4a`, { type: 'audio/mp4' });
-      updateProgress(90);
-
-      this.localFilesMap.set(trackId, file);
-
-      this.queue.update(q => q.map(t => t.id === trackId ? { 
-        ...t, 
-        source: 'local', 
-        downloadStatus: 'completed', 
-        downloadProgress: 100 
-      } : t));
-      this.saveQueueToLocalStorage();
-
-      if (this.currentIndex() !== -1) {
-        const currentTrack = this.queue()[this.currentIndex()];
-        const nextTrack = this.queue()[this.currentIndex() + 1];
-        if (currentTrack && currentTrack.id === trackId) {
-          this.preloadTrackOnPlayer(this.activePlayer(), currentTrack);
-        } else if (nextTrack && nextTrack.id === trackId) {
-          const nextPlay = this.activePlayer() === 'A' ? 'B' : 'A';
-          this.preloadTrackOnPlayer(nextPlay, nextTrack);
-        }
-      }
-
-      this.retryingTrackId.set(null);
-      this.showToast(`¡Pista "${track.title}" descargada con éxito!`, 'success');
-      
-    } catch (e) {
-      console.warn('Re-descarga fallida:', e);
-      
-      this.queue.update(q => q.map(t => t.id === trackId ? { 
-        ...t, 
-        downloadStatus: 'failed', 
-        downloadProgress: 0 
-      } : t));
-      this.saveQueueToLocalStorage();
-
-      this.retryingTrackId.set(null);
-      this.showToast(
-        'Los servidores proxy siguen saturados. No se pudo descargar en este momento.',
-        'error',
-        8000,
-        'VOLVER A INTENTAR',
-        () => this.retryDownloadTrack(trackId)
-      );
-    }
+    this.enqueueDownload(trackId, track.videoId, track.title, true);
   }
 
   /**
