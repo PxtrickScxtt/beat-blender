@@ -108,7 +108,9 @@ export class TrackSearch {
       this.mixer.showToast(`¡Descarga de "${title}" completada con éxito!`, 'success');
     } catch (e) {
       console.error('Error en descarga directa:', e);
-      this.mixer.showToast(`No se pudo descargar "${title}". Inténtalo de nuevo más tarde.`, 'error');
+      const fallbackUrl = `https://loader.to/api/button/?url=https://www.youtube.com/watch?v=${videoId}&f=mp3`;
+      window.open(fallbackUrl, '_blank');
+      this.mixer.showToast(`Descarga directa falló. Abriendo convertidor alternativo en otra pestaña...`, 'info', 6000);
     }
   }
 }
