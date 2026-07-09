@@ -139,7 +139,7 @@ export class SpotifyYoutubeService {
 
   // Regex para extraer IDs
   private youtubeRegex = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=|shorts\/)([^#\&\?]*).*/;
-  private spotifyRegex = /spotify\.com\/track\/([a-zA-Z0-9]+)/;
+  private spotifyRegex = /spotify\.com\/(?:[a-zA-Z0-9-]+\/)?track\/([a-zA-Z0-9]+)/;
 
   /**
    * Extrae el ID de video de YouTube de una URL
@@ -201,7 +201,7 @@ export class SpotifyYoutubeService {
       }
     }
 
-    if (query.includes('spotify.com/track/')) {
+    if (query.includes('spotify.com') && query.includes('/track/')) {
       const metadata = await this.getSpotifyMetadata(query);
       if (metadata) {
         // Buscar el equivalente en YouTube
