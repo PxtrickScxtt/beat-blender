@@ -20,6 +20,50 @@ export class Dashboard implements AfterViewInit {
   // Control de visibilidad del buscador modal
   public showSearchModal = signal<boolean>(false);
 
+  private loadAdInIframe(containerId: string, key: string, width: number, height: number): void {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    // Crear iframe
+    const iframe = document.createElement('iframe');
+    iframe.style.width = `${width}px`;
+    iframe.style.height = `${height}px`;
+    iframe.style.border = 'none';
+    iframe.style.overflow = 'hidden';
+    iframe.setAttribute('scrolling', 'no');
+    
+    container.innerHTML = ''; // Limpiar contenedor
+    container.appendChild(iframe);
+
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (doc) {
+      doc.open();
+      doc.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            html, body { margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
+          </style>
+        </head>
+        <body>
+          <script type="text/javascript">
+            window.atOptions = {
+              'key' : '${key}',
+              'format' : 'iframe',
+              'height' : ${height},
+              'width' : ${width},
+              'params' : {}
+            };
+          </script>
+          <script type="text/javascript" src="https://www.highperformanceformat.com/${key}/invoke.js"></script>
+        </body>
+        </html>
+      `);
+      doc.close();
+    }
+  }
+
   ngAfterViewInit(): void {
     // Inicializar los reproductores IFrame de YouTube con las IDs de los contenedores
     this.mixer.initPlayers('yt-player-a', 'yt-player-b').then(() => {
@@ -28,95 +72,12 @@ export class Dashboard implements AfterViewInit {
       this.mixer.loadQueueFromLocalStorage();
     });
 
-    // 1. Cargar Adsterra Banner 160x600 (Izquierdo)
-    setTimeout(() => {
-      const container = document.getElementById('adsterra-160-600');
-      if (container) {
-        (window as any).atOptions = {
-          'key' : '3a25a23666a8ab082a9008ac3cde70b2',
-          'format' : 'iframe',
-          'height' : 600,
-          'width' : 160,
-          'params' : {}
-        };
-        const script = document.createElement('script');
-        script.type = 'text/javascript';
-        script.src = 'https://www.highperformanceformat.com/3a25a23666a8ab082a9008ac3cde70b2/invoke.js';
-        container.appendChild(script);
-      }
-    }, 400);
-
-    // 2. Cargar Adsterra Banner 160x300 (Derecho)
-    setTimeout(() => {
-      const container = document.getElementById('adsterra-160-300');
-      if (container) {
-        (window as any).atOptions = {
-          'key' : '6a052c49293c9bf18ba26cfe0c5f51c8',
-          'format' : 'iframe',
-          'height' : 300,
-          'width' : 160,
-          'params' : {}
-        };
-        const script = document.createElement('script');
-        script.type = 'text/javascript';
-        script.src = 'https://www.highperformanceformat.com/6a052c49293c9bf18ba26cfe0c5f51c8/invoke.js';
-        container.appendChild(script);
-      }
-    }, 800);
-
-    // 3. Cargar Adsterra Banner 728x90 (Desktop Horizontal)
-    setTimeout(() => {
-      const container = document.getElementById('adsterra-728-90');
-      if (container) {
-        (window as any).atOptions = {
-          'key' : '5f028d9dd838a0b3fafdcca3fc9475bb',
-          'format' : 'iframe',
-          'height' : 90,
-          'width' : 728,
-          'params' : {}
-        };
-        const script = document.createElement('script');
-        script.type = 'text/javascript';
-        script.src = 'https://www.highperformanceformat.com/5f028d9dd838a0b3fafdcca3fc9475bb/invoke.js';
-        container.appendChild(script);
-      }
-    }, 1200);
-
-    // 4. Cargar Adsterra Banner 468x60 (Tablet Horizontal)
-    setTimeout(() => {
-      const container = document.getElementById('adsterra-468-60');
-      if (container) {
-        (window as any).atOptions = {
-          'key' : 'ceebb9f9fe88a8b5306516ff05055fc1',
-          'format' : 'iframe',
-          'height' : 60,
-          'width' : 468,
-          'params' : {}
-        };
-        const script = document.createElement('script');
-        script.type = 'text/javascript';
-        script.src = 'https://www.highperformanceformat.com/ceebb9f9fe88a8b5306516ff05055fc1/invoke.js';
-        container.appendChild(script);
-      }
-    }, 1600);
-
-    // 5. Cargar Adsterra Banner 320x50 (Mobile Horizontal)
-    setTimeout(() => {
-      const container = document.getElementById('adsterra-320-50');
-      if (container) {
-        (window as any).atOptions = {
-          'key' : '0a9d3fddb865b80d0c700316f014bdee',
-          'format' : 'iframe',
-          'height' : 50,
-          'width' : 320,
-          'params' : {}
-        };
-        const script = document.createElement('script');
-        script.type = 'text/javascript';
-        script.src = 'https://www.highperformanceformat.com/0a9d3fddb865b80d0c700316f014bdee/invoke.js';
-        container.appendChild(script);
-      }
-    }, 2000);
+    // Cargar anuncios en iframes aislados para evitar colisiones del global window.atOptions
+    setTimeout(() => this.loadAdInIframe('adsterra-160-600', '3a25a23666a8ab082a9008ac3cde70b2', 160, 600), 200);
+    setTimeout(() => this.loadAdInIframe('adsterra-160-300', '6a052c49293c9bf18ba26cfe0c5f51c8', 160, 300), 400);
+    setTimeout(() => this.loadAdInIframe('adsterra-728-90', '5f028d9dd838a0b3fafdcca3fc9475bb', 728, 90), 600);
+    setTimeout(() => this.loadAdInIframe('adsterra-468-60', 'ceebb9f9fe88a8b5306516ff05055fc1', 468, 60), 800);
+    setTimeout(() => this.loadAdInIframe('adsterra-320-50', '0a9d3fddb865b80d0c700316f014bdee', 320, 50), 1000);
   }
 
   public toggleVideoMonitor(): void {

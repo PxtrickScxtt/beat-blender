@@ -14,23 +14,54 @@ export class TrackQueue implements AfterViewInit {
   // Emite evento para abrir el buscador
   public onAddClick = output<void>();
 
+  private loadAdInIframe(containerId: string, key: string, width: number, height: number): void {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    // Crear iframe
+    const iframe = document.createElement('iframe');
+    iframe.style.width = `${width}px`;
+    iframe.style.height = `${height}px`;
+    iframe.style.border = 'none';
+    iframe.style.overflow = 'hidden';
+    iframe.setAttribute('scrolling', 'no');
+    
+    container.innerHTML = ''; // Limpiar contenedor
+    container.appendChild(iframe);
+
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (doc) {
+      doc.open();
+      doc.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            html, body { margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
+          </style>
+        </head>
+        <body>
+          <script type="text/javascript">
+            window.atOptions = {
+              'key' : '${key}',
+              'format' : 'iframe',
+              'height' : ${height},
+              'width' : ${width},
+              'params' : {}
+            };
+          </script>
+          <script type="text/javascript" src="https://www.highperformanceformat.com/${key}/invoke.js"></script>
+        </body>
+        </html>
+      `);
+      doc.close();
+    }
+  }
+
   ngAfterViewInit(): void {
-    // Cargar Adsterra Banner 300x250 con un pequeño retardo para evitar colisiones de variables atOptions
+    // Cargar Adsterra Banner 300x250 en iframe aislado
     setTimeout(() => {
-      const container = document.getElementById('adsterra-300-250');
-      if (container) {
-        (window as any).atOptions = {
-          'key' : '31ba9a1b8f483fef5846e224ebd3889c',
-          'format' : 'iframe',
-          'height' : 250,
-          'width' : 300,
-          'params' : {}
-        };
-        const script = document.createElement('script');
-        script.type = 'text/javascript';
-        script.src = 'https://www.highperformanceformat.com/31ba9a1b8f483fef5846e224ebd3889c/invoke.js';
-        container.appendChild(script);
-      }
+      this.loadAdInIframe('adsterra-300-250', '31ba9a1b8f483fef5846e224ebd3889c', 300, 250);
     }, 200);
   }
 
