@@ -40,7 +40,7 @@ export class SpotifyYoutubeService {
     try {
       const localProxyUrl = `https://beatblender-proxy.onrender.com/api/audio/${videoId}`;
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000); // 120s para evitar abortos cuando Render está bajo carga o procesando varias descargas simultáneas
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s para canciones largas
 
       const response = await fetch(localProxyUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
