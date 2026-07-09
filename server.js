@@ -179,78 +179,12 @@ app.get('/api/audio/:videoId', async (req, res) => {
 
   console.log(`[DESCARGA] Iniciando: ${videoId}`);
 
-  // === ESTRATEGIA 1: cobalt.tools (Instancias Públicas Rotativas - Más fiable en IPs cloud) ===
-  const cobaltHosts = [
-    'cobalt.privacydev.net',
-    'cobalt.hpko.xyz',
-    'co.wuk.sh',
-    'cblt.fariz.dev',
-    'cobaltapi.cjs.nz',
-    'cobalt.mr-r.xyz',
-    'cobalt.drgns.space',
-    'rue-cobalt.xenon.zone'
-  ];
-
-  for (const host of cobaltHosts) {
-    try {
-      console.log(`[COBALT] Intentando con instancia: ${host}...`);
-      const cobaltUrl = await downloadViaCobalt(videoId, host);
-      console.log(`[COBALT] URL obtenida desde ${host}, haciendo stream...`);
-      const https2 = require('https');
-      const http2 = require('http');
-      const client = cobaltUrl.startsWith('https') ? https2 : http2;
-      
-      const success = await new Promise((resolveStream) => {
-        const audioReq = client.get(cobaltUrl, { 
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-          timeout: 30000
-        }, (audioRes) => {
-          if (audioRes.statusCode !== 200) {
-            console.warn(`[COBALT] Stream desde ${host} devolvió status ${audioRes.statusCode}`);
-            audioRes.resume(); // consume and discard
-            resolveStream(false);
-            return;
-          }
-          const contentLength = parseInt(audioRes.headers['content-length'] || '-1');
-          if (contentLength === 0 || (contentLength > 0 && contentLength < 10000)) {
-            console.warn(`[COBALT] Content-length sospechosamente pequeño o vacío desde ${host}: ${contentLength}`);
-            audioRes.resume();
-            resolveStream(false);
-            return;
-          }
-          console.log(`[COBALT] Stream exitoso desde ${host}, content-length: ${audioRes.headers['content-length'] || 'chunked'}`);
-          res.setHeader('Content-Type', audioRes.headers['content-type'] || 'audio/mp4');
-          if (audioRes.headers['content-length']) res.setHeader('Content-Length', audioRes.headers['content-length']);
-          res.setHeader('Content-Disposition', `attachment; filename="${videoId}.m4a"`);
-          audioRes.pipe(res);
-          audioRes.on('end', () => resolveStream(true));
-          audioRes.on('error', (err) => {
-            console.error(`[COBALT] Error durante stream desde ${host}:`, err.message);
-            resolveStream(false);
-          });
-        });
-        audioReq.on('error', (err) => {
-          console.error(`[COBALT] Error de conexión en ${host}:`, err.message);
-          resolveStream(false);
-        });
-        audioReq.on('timeout', () => {
-          audioReq.destroy();
-          resolveStream(false);
-        });
-      });
-
-      if (success) return;
-    } catch (cobaltErr) {
-      console.warn(`[COBALT] Instancia ${host} falló: ${cobaltErr.message}`);
-    }
-  }
-
-  // === ESTRATEGIA 2: yt-dlp con múltiples clientes (fallback) ===
-  // Intentar con diferentes player_clients en orden de compatibilidad cloud
-  const ytdlpClients = ['mweb', 'web_creator', 'ios', 'android'];
+  // === ESTRATEGIA 1: yt-dlp con múltiples clientes (Primero android, que es el más fiable) ===
+  const ytdlpClients = ['android', 'ios', 'mweb', 'web_creator'];
+  let ytdlpSuccess = false;
 
   for (const playerClient of ytdlpClients) {
-    const ytdlpSuccess = await new Promise((resolveYtdlp) => {
+    const success = await new Promise((resolveYtdlp) => {
       const proxy = getRandomProxy();
       const args = [
         '--no-playlist',
@@ -311,8 +245,85 @@ app.get('/api/audio/:videoId', async (req, res) => {
       });
     });
 
-    if (ytdlpSuccess) return;
+    if (success) {
+      ytdlpSuccess = true;
+      break;
+    }
   }
+
+  if (ytdlpSuccess) return;
+
+  // === ESTRATEGIA 2: cobalt.tools (Instancias Públicas Rotativas - Fallback) ===
+  const cobaltHosts = [
+    'cobalt.privacydev.net',
+    'cobalt.hpko.xyz',
+    'co.wuk.sh',
+    'cblt.fariz.dev',
+    'cobaltapi.cjs.nz',
+    'cobalt.mr-r.xyz',
+    'cobalt.drgns.space',
+    'rue-cobalt.xenon.zone'
+  ];
+
+  let cobaltSuccess = false;
+  for (const host of cobaltHosts) {
+    try {
+      console.log(`[COBALT] Intentando con instancia: ${host}...`);
+      const cobaltUrl = await downloadViaCobalt(videoId, host);
+      console.log(`[COBALT] URL obtenida desde ${host}, haciendo stream...`);
+      const https2 = require('https');
+      const http2 = require('http');
+      const client = cobaltUrl.startsWith('https') ? https2 : http2;
+      
+      const success = await new Promise((resolveStream) => {
+        const audioReq = client.get(cobaltUrl, { 
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+          timeout: 30000
+        }, (audioRes) => {
+          if (audioRes.statusCode !== 200) {
+            console.warn(`[COBALT] Stream desde ${host} devolvió status ${audioRes.statusCode}`);
+            audioRes.resume(); // consume and discard
+            resolveStream(false);
+            return;
+          }
+          const contentLength = parseInt(audioRes.headers['content-length'] || '-1');
+          if (contentLength === 0 || (contentLength > 0 && contentLength < 10000)) {
+            console.warn(`[COBALT] Content-length sospechosamente pequeño o vacío desde ${host}: ${contentLength}`);
+            audioRes.resume();
+            resolveStream(false);
+            return;
+          }
+          console.log(`[COBALT] Stream exitoso desde ${host}, content-length: ${audioRes.headers['content-length'] || 'chunked'}`);
+          res.setHeader('Content-Type', audioRes.headers['content-type'] || 'audio/mp4');
+          if (audioRes.headers['content-length']) res.setHeader('Content-Length', audioRes.headers['content-length']);
+          res.setHeader('Content-Disposition', `attachment; filename="${videoId}.m4a"`);
+          audioRes.pipe(res);
+          audioRes.on('end', () => resolveStream(true));
+          audioRes.on('error', (err) => {
+            console.error(`[COBALT] Error durante stream desde ${host}:`, err.message);
+            resolveStream(false);
+          });
+        });
+        audioReq.on('error', (err) => {
+          console.error(`[COBALT] Error de conexión en ${host}:`, err.message);
+          resolveStream(false);
+        });
+        audioReq.on('timeout', () => {
+          audioReq.destroy();
+          resolveStream(false);
+        });
+      });
+
+      if (success) {
+        cobaltSuccess = true;
+        break;
+      }
+    } catch (cobaltErr) {
+      console.warn(`[COBALT] Instancia ${host} falló: ${cobaltErr.message}`);
+    }
+  }
+
+  if (cobaltSuccess) return;
 
   // === ESTRATEGIA 3: SaveNow API (loader.to Backend - Último recurso) ===
   try {
