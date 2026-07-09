@@ -226,7 +226,41 @@ app.get('/api/audio/:videoId', async (req, res) => {
 
   if (ytdlpSuccess) return;
 
-  // === ESTRATEGIA 2: cobalt.tools (Instancias Públicas Rotativas - Fallback) ===
+  // === ESTRATEGIA 2: SaveNow API (loader.to Backend - Fallback) ===
+  let saveNowSuccess = false;
+  try {
+    console.log(`[SAVENOW] Intentando SaveNow...`);
+    const downloadUrl = await downloadViaSaveNow(videoId);
+    console.log(`[SAVENOW] URL de descarga obtenida: ${downloadUrl}`);
+    const https3 = require('https');
+    const http3 = require('http');
+    const client = downloadUrl.startsWith('https') ? https3 : http3;
+    
+    saveNowSuccess = await new Promise((resolveStream) => {
+      client.get(downloadUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (audioRes) => {
+        if (audioRes.statusCode !== 200) {
+          console.warn(`[SAVENOW] Stream devolvió status ${audioRes.statusCode}`);
+          resolveStream(false);
+          return;
+        }
+        console.log(`[SAVENOW] Stream exitoso`);
+        res.setHeader('Content-Type', audioRes.headers['content-type'] || 'audio/mpeg');
+        if (audioRes.headers['content-length']) res.setHeader('Content-Length', audioRes.headers['content-length']);
+        res.setHeader('Content-Disposition', `attachment; filename="${videoId}.mp3"`);
+        audioRes.pipe(res);
+        resolveStream(true);
+      }).on('error', (err) => {
+        console.error(`[SAVENOW] Error de stream:`, err.message);
+        resolveStream(false);
+      });
+    });
+  } catch (saveNowErr) {
+    console.warn(`[SAVENOW] Falló: ${saveNowErr.message}.`);
+  }
+
+  if (saveNowSuccess) return;
+
+  // === ESTRATEGIA 3: cobalt.tools (Instancias Públicas Rotativas - Fallback) ===
   const cobaltHosts = [
     'cblt.fariz.dev',
     'rue-cobalt.xenon.zone',
@@ -267,39 +301,6 @@ app.get('/api/audio/:videoId', async (req, res) => {
     } catch (cobaltErr) {
       console.warn(`[COBALT] Instancia ${host} falló: ${cobaltErr.message}`);
     }
-  }
-
-  // === ESTRATEGIA 3: SaveNow API (loader.to Backend - Fallback) ===
-  try {
-    console.log(`[SAVENOW] Intentando SaveNow...`);
-    const downloadUrl = await downloadViaSaveNow(videoId);
-    console.log(`[SAVENOW] URL de descarga obtenida: ${downloadUrl}`);
-    const https3 = require('https');
-    const http3 = require('http');
-    const client = downloadUrl.startsWith('https') ? https3 : http3;
-    
-    const success = await new Promise((resolveStream) => {
-      client.get(downloadUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (audioRes) => {
-        if (audioRes.statusCode !== 200) {
-          console.warn(`[SAVENOW] Stream devolvió status ${audioRes.statusCode}`);
-          resolveStream(false);
-          return;
-        }
-        console.log(`[SAVENOW] Stream exitoso`);
-        res.setHeader('Content-Type', audioRes.headers['content-type'] || 'audio/mpeg');
-        if (audioRes.headers['content-length']) res.setHeader('Content-Length', audioRes.headers['content-length']);
-        res.setHeader('Content-Disposition', `attachment; filename="${videoId}.mp3"`);
-        audioRes.pipe(res);
-        resolveStream(true);
-      }).on('error', (err) => {
-        console.error(`[SAVENOW] Error de stream:`, err.message);
-        resolveStream(false);
-      });
-    });
-
-    if (success) return;
-  } catch (saveNowErr) {
-    console.warn(`[SAVENOW] Falló: ${saveNowErr.message}.`);
   }
 
   // Si todo lo demás falla, responder error
