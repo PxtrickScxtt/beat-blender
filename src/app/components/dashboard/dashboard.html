@@ -75,14 +75,21 @@
     >
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-950/60 p-4 border border-dj-border rounded-2xl backdrop-blur-md">
         <!-- Deck A Monitor -->
-        <div class="relative aspect-video bg-black rounded-lg overflow-hidden border border-slate-800">
-          <div id="yt-player-a" class="w-full h-full"></div>
+        <div class="relative aspect-video bg-black rounded-lg overflow-hidden border border-slate-800 flex items-center justify-center">
+          <!-- Reproductor oculto en el DOM para evitar errores del API de YouTube -->
+          <div id="yt-player-a" class="absolute w-0 h-0 opacity-0 pointer-events-none"></div>
           
-          <!-- Thumbnail Overlay to hide random YouTube recommendations -->
+          <!-- Imagen de la canción en pantalla completa -->
           @let trackA_video = (mixer.activePlayer() === 'A') ? mixer.currentTrack() : mixer.nextTrack();
           @if (trackA_video) {
-            <img [src]="trackA_video.thumbnail" class="absolute inset-0 w-full h-full object-cover z-10 opacity-90 pointer-events-none">
-            <div class="absolute inset-0 bg-black/40 z-10 pointer-events-none"></div>
+            <img [src]="trackA_video.thumbnail" [alt]="trackA_video.title" class="w-full h-full object-cover">
+            <div class="absolute inset-0 bg-black/40 pointer-events-none"></div>
+          } @else {
+            <div class="w-full h-full flex items-center justify-center text-slate-700 bg-slate-950/40">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" class="w-12 h-12">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m9 9 10.5-3m0 0v15m0-15-10.5 3m0 0v15m0-15h10.5M9 21a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm12 0a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+              </svg>
+            </div>
           }
 
           <!-- Overlay de Estado -->
@@ -99,14 +106,21 @@
         </div>
 
         <!-- Deck B Monitor -->
-        <div class="relative aspect-video bg-black rounded-lg overflow-hidden border border-slate-800">
-          <div id="yt-player-b" class="w-full h-full"></div>
+        <div class="relative aspect-video bg-black rounded-lg overflow-hidden border border-slate-800 flex items-center justify-center">
+          <!-- Reproductor oculto en el DOM para evitar errores del API de YouTube -->
+          <div id="yt-player-b" class="absolute w-0 h-0 opacity-0 pointer-events-none"></div>
           
-          <!-- Thumbnail Overlay to hide random YouTube recommendations -->
+          <!-- Imagen de la canción en pantalla completa -->
           @let trackB_video = (mixer.activePlayer() === 'B') ? mixer.currentTrack() : mixer.nextTrack();
           @if (trackB_video) {
-            <img [src]="trackB_video.thumbnail" class="absolute inset-0 w-full h-full object-cover z-10 opacity-90 pointer-events-none">
-            <div class="absolute inset-0 bg-black/40 z-10 pointer-events-none"></div>
+            <img [src]="trackB_video.thumbnail" [alt]="trackB_video.title" class="w-full h-full object-cover">
+            <div class="absolute inset-0 bg-black/40 pointer-events-none"></div>
+          } @else {
+            <div class="w-full h-full flex items-center justify-center text-slate-700 bg-slate-950/40">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor" class="w-12 h-12">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m9 9 10.5-3m0 0v15m0-15-10.5 3m0 0v15m0-15h10.5M9 21a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm12 0a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+              </svg>
+            </div>
           }
 
           <!-- Overlay de Estado -->
