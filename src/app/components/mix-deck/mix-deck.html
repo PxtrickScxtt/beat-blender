@@ -10,7 +10,7 @@
     <div class="flex items-center justify-between">
       <div class="flex items-center space-x-2">
         <span class="w-2.5 h-2.5 rounded-full" [ngClass]="recorder.isRecording() ? 'bg-red-500 animate-ping' : 'bg-slate-700'"></span>
-        <h3 class="text-xs font-mono font-bold tracking-wider text-slate-200">EXPORT MIX ENGINE</h3>
+        <h3 class="text-xs font-mono font-bold tracking-wider text-slate-200">MOTOR DE EXPORTACIÓN DE MEZCLA</h3>
       </div>
       
       @if (recorder.isRecording()) {
@@ -19,11 +19,11 @@
         </span>
       } @else if (recorder.isProcessing()) {
         <span class="text-xs font-mono text-dj-neon-cyan font-bold animate-pulse">
-          PROCESSING...
+          PROCESANDO...
         </span>
       } @else {
         <span class="text-[10px] font-mono text-slate-500">
-          DISCO READY
+          DISCO LISTO
         </span>
       }
     </div>
@@ -79,7 +79,7 @@
             class="px-3 py-1.5 text-[10px] font-bold font-mono rounded-lg transition-all cursor-pointer disabled:opacity-50"
             [ngClass]="selectedFormat() === 'wav' ? 'bg-dj-neon-purple text-white shadow-sm' : 'text-slate-400 hover:text-white'"
           >
-            WAV (Lossless)
+            WAV (Sin pérdida)
           </button>
           <button 
             [disabled]="recorder.isRecording()"
@@ -165,12 +165,12 @@
           ></div>
         }
       </div>
-      <span class="text-[9px] font-mono text-dj-neon-pink mt-2 tracking-widest animate-pulse">LIVE SPECTRUM ANALYZER</span>
+      <span class="text-[9px] font-mono text-dj-neon-pink mt-2 tracking-widest animate-pulse">ANALIZADOR DE ESPECTRO EN VIVO</span>
     } @else {
       <div class="flex items-center justify-center h-[50px] w-full text-slate-500 font-mono text-xs tracking-widest">
-        [ CONSOLE STANDBY ]
+        [ CONSOLA EN ESPERA ]
       </div>
-      <span class="text-[9px] font-mono text-slate-500 mt-2 tracking-widest">SYSTEM IDLE</span>
+      <span class="text-[9px] font-mono text-slate-500 mt-2 tracking-widest">SISTEMA INACTIVO</span>
     }
   </div>
 
@@ -312,7 +312,7 @@
     <div class="bg-slate-950/50 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 relative">
       <div class="flex justify-between items-center text-xs font-mono">
         <div class="flex items-center space-x-2">
-          <span class="text-dj-neon-pink font-bold">NOW PLAYING:</span>
+          <span class="text-dj-neon-pink font-bold">SONANDO AHORA:</span>
           <span class="text-slate-300 font-semibold truncate max-w-[200px] md:max-w-xs">{{ current.title }}</span>
         </div>
         <div class="text-slate-400">
@@ -450,7 +450,7 @@
       <!-- Indicador visual del centro -->
       <div class="flex justify-between px-1 text-[8px] font-mono text-slate-600">
         <span>100% A</span>
-        <span>CENTER</span>
+        <span>CENTRO</span>
         <span>100% B</span>
       </div>
     </div>

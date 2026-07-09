@@ -17,7 +17,7 @@
           <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 5.25h16.5m-16.5-10.5h16.5" />
         </svg>
         <h2 class="text-sm font-bold tracking-wider font-mono text-slate-200">
-          SETLIST QUEUE ({{ mixer.queue().length }})
+          COLA DEL SETLIST ({{ mixer.queue().length }})
         </h2>
       </div>
       
@@ -118,7 +118,7 @@
                   </div>
                 } @else {
                   @if (track.source === 'local') {
-                    <span class="text-[8px] bg-purple-950 text-purple-400 border border-purple-900 px-1 rounded-sm">Local File</span>
+                    <span class="text-[8px] bg-purple-950 text-purple-400 border border-purple-900 px-1 rounded-sm">Archivo Local</span>
                   } @else if (track.source === 'spotify') {
                     <span class="text-[8px] bg-emerald-950 text-emerald-400 border border-emerald-800 px-1 rounded-sm">Spotify</span>
                   } @else {
