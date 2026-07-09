@@ -166,7 +166,7 @@ async function downloadViaSaveNow(videoId) {
 
 /**
  * Endpoint: GET /api/audio/:videoId
- * Descarga el audio real de YouTube: primero cobalt.tools, luego yt-dlp.
+ * Descarga el audio real de YouTube: primero cobalt.tools, luego yt-dlp con múltiples clientes.
  */
 app.get('/api/audio/:videoId', async (req, res) => {
   const { videoId } = req.params;
@@ -179,60 +179,18 @@ app.get('/api/audio/:videoId', async (req, res) => {
 
   console.log(`[DESCARGA] Iniciando: ${videoId}`);
 
-  const doYtdlp = (onDone) => {
-    const args = ['--no-playlist', ...getYtdlpBaseArgs(), '-o', outputFile, ytUrl];
-    console.log(`[yt-dlp] Ejecutando: yt-dlp ${args.join(' ')}`);
-    execFile(YT_DLP, args, { timeout: 15000, maxBuffer: 1024 * 1024 * 50 }, (error) => {
-      if (error) { onDone(error, null); return; }
-      const files = fs.readdirSync(tmpDir).filter(f => f.startsWith(filePrefix));
-      if (files.length === 0) { onDone(new Error('Archivo no encontrado'), null); return; }
-      onDone(null, path.join(tmpDir, files[0]));
-    });
-  };
-
-  // === ESTRATEGIA 1: yt-dlp (Con proxies rotativos - Altamente fiable) ===
-  const ytdlpSuccess = await new Promise((resolveYtdlp) => {
-    doYtdlp((err, filePath) => {
-      if (err || !filePath) {
-        console.error(`[yt-dlp] Falló:`, err?.message || 'Ruta vacía. Probando fallbacks...');
-        resolveYtdlp(false);
-        return;
-      }
-      try {
-        const stat = fs.statSync(filePath);
-        console.log(`[yt-dlp] Éxito: ${filePath} (${(stat.size/1024/1024).toFixed(2)} MB)`);
-        res.setHeader('Content-Type', 'audio/mp4');
-        res.setHeader('Content-Length', stat.size);
-        res.setHeader('Content-Disposition', `attachment; filename="${videoId}.m4a"`);
-        const s = fs.createReadStream(filePath);
-        s.pipe(res);
-        s.on('end', () => { 
-          try { fs.unlinkSync(filePath); } catch(e){}
-          resolveYtdlp(true);
-        });
-        s.on('error', (streamErr) => {
-          console.error('[yt-dlp] Error de lectura del stream:', streamErr.message);
-          resolveYtdlp(false);
-        });
-      } catch (statErr) {
-        console.error('[yt-dlp] Error leyendo stats/archivo:', statErr.message);
-        resolveYtdlp(false);
-      }
-    });
-  });
-
-  if (ytdlpSuccess) return;
-
-  // === ESTRATEGIA 2: cobalt.tools (Instancias Públicas Rotativas - Fallback) ===
+  // === ESTRATEGIA 1: cobalt.tools (Instancias Públicas Rotativas - Más fiable en IPs cloud) ===
   const cobaltHosts = [
+    'cobalt.privacydev.net',
+    'cobalt.hpko.xyz',
+    'co.wuk.sh',
     'cblt.fariz.dev',
-    'rue-cobalt.xenon.zone',
-    'dog.kittycat.boo',
-    'cobaltapi.kittycat.boo',
-    'cobaltapi.cjs.nz'
+    'cobaltapi.cjs.nz',
+    'cobalt.mr-r.xyz',
+    'cobalt.drgns.space',
+    'rue-cobalt.xenon.zone'
   ];
 
-  let cobaltSuccess = false;
   for (const host of cobaltHosts) {
     try {
       console.log(`[COBALT] Intentando con instancia: ${host}...`);
@@ -243,37 +201,120 @@ app.get('/api/audio/:videoId', async (req, res) => {
       const client = cobaltUrl.startsWith('https') ? https2 : http2;
       
       const success = await new Promise((resolveStream) => {
-        client.get(cobaltUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (audioRes) => {
+        const audioReq = client.get(cobaltUrl, { 
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+          timeout: 30000
+        }, (audioRes) => {
           if (audioRes.statusCode !== 200) {
             console.warn(`[COBALT] Stream desde ${host} devolvió status ${audioRes.statusCode}`);
+            audioRes.resume(); // consume and discard
             resolveStream(false);
             return;
           }
-          console.log(`[COBALT] Stream exitoso desde ${host}`);
+          const contentLength = parseInt(audioRes.headers['content-length'] || '0');
+          if (contentLength > 0 && contentLength < 10000) {
+            console.warn(`[COBALT] Content-length sospechosamente pequeño desde ${host}: ${contentLength}`);
+            audioRes.resume();
+            resolveStream(false);
+            return;
+          }
+          console.log(`[COBALT] Stream exitoso desde ${host}, content-length: ${audioRes.headers['content-length'] || 'chunked'}`);
           res.setHeader('Content-Type', audioRes.headers['content-type'] || 'audio/mp4');
           if (audioRes.headers['content-length']) res.setHeader('Content-Length', audioRes.headers['content-length']);
           res.setHeader('Content-Disposition', `attachment; filename="${videoId}.m4a"`);
           audioRes.pipe(res);
-          resolveStream(true);
-        }).on('error', (err) => {
-          console.error(`[COBALT] Error de stream en ${host}:`, err.message);
+          audioRes.on('end', () => resolveStream(true));
+          audioRes.on('error', (err) => {
+            console.error(`[COBALT] Error durante stream desde ${host}:`, err.message);
+            resolveStream(false);
+          });
+        });
+        audioReq.on('error', (err) => {
+          console.error(`[COBALT] Error de conexión en ${host}:`, err.message);
+          resolveStream(false);
+        });
+        audioReq.on('timeout', () => {
+          audioReq.destroy();
           resolveStream(false);
         });
       });
 
-      if (success) {
-        cobaltSuccess = true;
-        break;
-      }
+      if (success) return;
     } catch (cobaltErr) {
       console.warn(`[COBALT] Instancia ${host} falló: ${cobaltErr.message}`);
     }
   }
 
-  if (cobaltSuccess) return;
+  // === ESTRATEGIA 2: yt-dlp con múltiples clientes (fallback) ===
+  // Intentar con diferentes player_clients en orden de compatibilidad cloud
+  const ytdlpClients = ['mweb', 'web_creator', 'ios', 'android'];
 
-  // === ESTRATEGIA 3: SaveNow API (loader.to Backend - Fallback) ===
-  let saveNowSuccess = false;
+  for (const playerClient of ytdlpClients) {
+    const ytdlpSuccess = await new Promise((resolveYtdlp) => {
+      const proxy = getRandomProxy();
+      const args = [
+        '--no-playlist',
+        '--no-warnings',
+        '--no-check-certificates',
+        '--geo-bypass',
+        '--socket-timeout', '8',
+        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        '--proxy', proxy,
+        '--extractor-args', `youtube:player_client=${playerClient}`,
+        '-f', 'bestaudio[ext=m4a]/bestaudio/best',
+        '-o', outputFile,
+        ytUrl
+      ];
+      const cookies = getCookiesFile();
+      if (cookies) args.push('--cookies', cookies);
+
+      console.log(`[yt-dlp] Intentando con player_client=${playerClient}...`);
+      execFile(YT_DLP, args, { timeout: 20000, maxBuffer: 1024 * 1024 * 100 }, (error) => {
+        if (error) {
+          console.warn(`[yt-dlp] Falló con ${playerClient}:`, error.message?.slice(0, 100));
+          resolveYtdlp(false);
+          return;
+        }
+        const files = fs.readdirSync(tmpDir).filter(f => f.startsWith(filePrefix));
+        if (files.length === 0) {
+          console.warn(`[yt-dlp] Sin archivo generado con ${playerClient}`);
+          resolveYtdlp(false);
+          return;
+        }
+        const filePath = path.join(tmpDir, files[0]);
+        try {
+          const stat = fs.statSync(filePath);
+          if (stat.size < 10000) {
+            console.warn(`[yt-dlp] Archivo demasiado pequeño con ${playerClient}: ${stat.size} bytes`);
+            try { fs.unlinkSync(filePath); } catch(e) {}
+            resolveYtdlp(false);
+            return;
+          }
+          console.log(`[yt-dlp] Éxito con ${playerClient}: ${filePath} (${(stat.size/1024/1024).toFixed(2)} MB)`);
+          res.setHeader('Content-Type', 'audio/mp4');
+          res.setHeader('Content-Length', stat.size);
+          res.setHeader('Content-Disposition', `attachment; filename="${videoId}.m4a"`);
+          const stream = fs.createReadStream(filePath);
+          stream.pipe(res);
+          stream.on('end', () => {
+            try { fs.unlinkSync(filePath); } catch(e) {}
+            resolveYtdlp(true);
+          });
+          stream.on('error', (streamErr) => {
+            console.error('[yt-dlp] Error de lectura:', streamErr.message);
+            resolveYtdlp(false);
+          });
+        } catch (statErr) {
+          console.error('[yt-dlp] Error leyendo archivo:', statErr.message);
+          resolveYtdlp(false);
+        }
+      });
+    });
+
+    if (ytdlpSuccess) return;
+  }
+
+  // === ESTRATEGIA 3: SaveNow API (loader.to Backend - Último recurso) ===
   try {
     console.log(`[SAVENOW] Intentando SaveNow...`);
     const downloadUrl = await downloadViaSaveNow(videoId);
@@ -282,10 +323,11 @@ app.get('/api/audio/:videoId', async (req, res) => {
     const http3 = require('http');
     const client = downloadUrl.startsWith('https') ? https3 : http3;
     
-    saveNowSuccess = await new Promise((resolveStream) => {
+    const saveNowSuccess = await new Promise((resolveStream) => {
       client.get(downloadUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (audioRes) => {
         if (audioRes.statusCode !== 200) {
           console.warn(`[SAVENOW] Stream devolvió status ${audioRes.statusCode}`);
+          audioRes.resume();
           resolveStream(false);
           return;
         }
@@ -300,15 +342,16 @@ app.get('/api/audio/:videoId', async (req, res) => {
         resolveStream(false);
       });
     });
+
+    if (saveNowSuccess) return;
   } catch (saveNowErr) {
     console.warn(`[SAVENOW] Falló: ${saveNowErr.message}.`);
   }
 
-  if (saveNowSuccess) return;
-
-  // Si todo lo demás falla, responder error
+  // Si todo lo demás falla, responder error (NUNCA 200 con cuerpo vacío)
   if (!res.headersSent) {
-    res.status(500).json({ error: "Todos los motores de descarga fallaron en este servidor." });
+    console.error(`[DESCARGA] Todos los motores fallaron para ${videoId}`);
+    res.status(502).json({ error: "Todos los motores de descarga fallaron. La canción se reproducirá online." });
   }
 });
 
