@@ -76,17 +76,21 @@ function getRandomProxy() {
  * Devuelve los argumentos base para yt-dlp incluyendo cookies si están disponibles
  */
 function getYtdlpBaseArgs() {
-  const proxy = getRandomProxy();
   const args = [
     '--no-warnings',
     '--no-check-certificates',
     '--geo-bypass',
-    '--socket-timeout', '5',
+    '--socket-timeout', '8',
     '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    '--proxy', proxy,
     // web_creator no requiere PO token y funciona desde IPs de servidores cloud
     '--extractor-args', 'youtube:player_client=web_creator',
   ];
+
+  if (process.env.RENDER || process.env.PORT) {
+    const proxy = getRandomProxy();
+    args.push('--proxy', proxy);
+  }
+
   const cookies = getCookiesFile();
   if (cookies) {
     args.push('--cookies', cookies);
@@ -265,11 +269,9 @@ app.get('/api/audio/:videoId', async (req, res) => {
     });
   };
 
-  // --- MOTOR 3: yt-dlp ---
   const tryYtdlpClient = async (playerClient) => {
     console.log(`[CARRERA] -> Iniciando yt-dlp con client=${playerClient}...`);
     const outputFile = path.join(tmpDir, `${filePrefix}-${playerClient}.%(ext)s`);
-    const proxy = getRandomProxy();
     const args = [
       '--no-playlist',
       '--no-warnings',
@@ -277,12 +279,16 @@ app.get('/api/audio/:videoId', async (req, res) => {
       '--geo-bypass',
       '--socket-timeout', '8',
       '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      '--proxy', proxy,
       '--extractor-args', `youtube:player_client=${playerClient}`,
       '-f', 'bestaudio[ext=m4a]/bestaudio/best',
       '-o', outputFile,
       ytUrl
     ];
+
+    if (process.env.RENDER || process.env.PORT) {
+      const proxy = getRandomProxy();
+      args.splice(7, 0, '--proxy', proxy);
+    }
     const cookies = getCookiesFile();
     if (cookies) args.push('--cookies', cookies);
 
@@ -586,6 +592,60 @@ app.get('/api/info/:videoId', async (req, res) => {
   }
 });
 
+async function searchViaPiped(query) {
+  const pipedHosts = [
+    'pipedapi.kavin.rocks',
+    'piped-api.garudalinux.org',
+    'piped-api.lcomera.co',
+    'pipedapi.r4fo.com'
+  ];
+
+  for (const host of pipedHosts) {
+    try {
+      console.log(`[BUSQUEDA] Intentando fallback con Piped host: ${host}`);
+      const https = require('https');
+      const url = `https://${host}/search?q=${encodeURIComponent(query)}&filter=videos`;
+      
+      const json = await new Promise((resolve, reject) => {
+        const req = https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 8000 }, (apiRes) => {
+          if (apiRes.statusCode !== 200) {
+            apiRes.resume();
+            return reject(new Error(`Piped API ${host} status ${apiRes.statusCode}`));
+          }
+          let data = '';
+          apiRes.on('data', chunk => data += chunk);
+          apiRes.on('end', () => {
+            try { resolve(JSON.parse(data)); }
+            catch(e) { reject(new Error(`Piped API ${host} JSON inválido`)); }
+          });
+        });
+        req.on('error', reject);
+        req.on('timeout', () => {
+          req.destroy();
+          reject(new Error(`Piped API ${host} timeout`));
+        });
+      });
+
+      if (json && json.items && json.items.length > 0) {
+        console.log(`[BUSQUEDA] Fallback exitoso usando Piped host: ${host}`);
+        return json.items.map(item => {
+          const videoId = item.url ? item.url.replace('/watch?v=', '') : '';
+          return {
+            videoId: videoId,
+            title: item.title || 'Sin título',
+            artist: item.uploaderName || 'Canal Desconocido',
+            thumbnail: item.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+            duration: item.duration || 0
+          };
+        }).filter(item => item.videoId);
+      }
+    } catch (e) {
+      console.warn(`[BUSQUEDA] Falló Piped host ${host}: ${e.message}`);
+    }
+  }
+  throw new Error('Todos los motores de búsqueda alternativa (Piped) fallaron');
+}
+
 app.get('/api/search/:query', async (req, res) => {
   const { query } = req.params;
   try {
@@ -615,8 +675,14 @@ app.get('/api/search/:query', async (req, res) => {
     }));
     res.json(parsed);
   } catch (err) {
-    console.error(`[ERROR] Búsqueda fallida para "${query}":`, err.message);
-    res.status(500).json({ error: err.message });
+    console.warn(`[BUSQUEDA] yt-dlp falló ("${err.message}"). Intentando fallback con Piped API...`);
+    try {
+      const parsedFallback = await searchViaPiped(query);
+      res.json(parsedFallback);
+    } catch (fallbackErr) {
+      console.error(`[ERROR] Ambos motores de búsqueda fallaron para "${query}":`, fallbackErr.message);
+      res.status(500).json({ error: `Búsqueda fallida: ${err.message} / Fallback: ${fallbackErr.message}` });
+    }
   }
 });
 
