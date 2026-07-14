@@ -270,15 +270,16 @@ app.get('/api/audio/:videoId', async (req, res) => {
     });
   };
 
-  const tryYtdlpClient = async (playerClient) => {
-    console.log(`[CARRERA] -> Iniciando yt-dlp con client=${playerClient}...`);
-    const outputFile = path.join(tmpDir, `${filePrefix}-${playerClient}.%(ext)s`);
+  const tryYtdlpClient = async (playerClient, proxyOverride = null) => {
+    const suffix = proxyOverride ? '-' + proxyOverride.split('@')[1].replace(/[:.]/g, '_') : '-direct';
+    console.log(`[CARRERA] -> Iniciando yt-dlp con client=${playerClient}${proxyOverride ? ' usando proxy ' + suffix : ' (directo)'}...`);
+    const outputFile = path.join(tmpDir, `${filePrefix}-${playerClient}${suffix}.%(ext)s`);
     const args = [
       '--no-playlist',
       '--no-warnings',
       '--no-check-certificates',
       '--geo-bypass',
-      '--socket-timeout', '8',
+      '--socket-timeout', '10',
       '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       '--extractor-args', `youtube:player_client=${playerClient}`,
       '-f', 'bestaudio[ext=m4a]/bestaudio/best',
@@ -286,8 +287,8 @@ app.get('/api/audio/:videoId', async (req, res) => {
       ytUrl
     ];
 
-    if (process.env.RENDER || process.env.PORT) {
-      const proxy = getRandomProxy();
+    const proxy = proxyOverride || ((process.env.RENDER || process.env.PORT) ? getRandomProxy() : null);
+    if (proxy) {
       args.splice(7, 0, '--proxy', proxy);
     }
     const cookies = getCookiesFile();
@@ -295,18 +296,18 @@ app.get('/api/audio/:videoId', async (req, res) => {
 
     return new Promise((resolve, reject) => {
       const child = execFile(YT_DLP, args, { timeout: 25000, maxBuffer: 1024 * 1024 * 100 }, (error) => {
-        if (error) return reject(new Error(`yt-dlp [${playerClient}]: ${error.message?.slice(0, 80)}`));
-        const files = fs.readdirSync(tmpDir).filter(f => f.startsWith(`${filePrefix}-${playerClient}`));
-        if (files.length === 0) return reject(new Error(`yt-dlp [${playerClient}]: no se generó archivo`));
+        if (error) return reject(new Error(`yt-dlp [${playerClient}${suffix}]: ${error.message?.slice(0, 80)}`));
+        const files = fs.readdirSync(tmpDir).filter(f => f.startsWith(`${filePrefix}-${playerClient}${suffix}`));
+        if (files.length === 0) return reject(new Error(`yt-dlp [${playerClient}${suffix}]: no se generó archivo`));
         
         const filePath = path.join(tmpDir, files[0]);
         try {
           const stat = fs.statSync(filePath);
           if (stat.size < 10000) {
             try { fs.unlinkSync(filePath); } catch(e) {}
-            return reject(new Error(`yt-dlp [${playerClient}]: archivo demasiado pequeño`));
+            return reject(new Error(`yt-dlp [${playerClient}${suffix}]: archivo demasiado pequeño`));
           }
-          console.log(`[CARRERA] -> ¡yt-dlp con ${playerClient} ha GANADO la carrera!`);
+          console.log(`[CARRERA] -> ¡yt-dlp con ${playerClient}${suffix} ha GANADO la carrera!`);
           const stream = fs.createReadStream(filePath);
           
           // Limpieza al cerrar la descarga
@@ -470,10 +471,8 @@ app.get('/api/audio/:videoId', async (req, res) => {
   const cobaltHosts = [
     'cblt.fariz.dev',
     'cobalt.hpko.xyz',
-    'cobaltapi.cjs.nz',
     'cobalt.drgns.space',
-    'rue-cobalt.xenon.zone',
-    'cobalt.synesthesiam.com'
+    'rue-cobalt.xenon.zone'
   ];
   cobaltHosts.forEach(host => {
     promises.push(tryCobaltHost(host));
@@ -481,12 +480,8 @@ app.get('/api/audio/:videoId', async (req, res) => {
 
   // 3. Añadir hosts Invidious activos
   const invidiousHosts = [
-    'yewtu.be',
-    'vid.puffyan.us',
     'invidious.projectsegfau.lt',
-    'invidious.io.lol',
-    'iv.melmac.space',
-    'invidious.flokinet.to'
+    'vid.puffyan.us'
   ];
   invidiousHosts.forEach(host => {
     promises.push(tryInvidiousHost(host));
@@ -495,24 +490,35 @@ app.get('/api/audio/:videoId', async (req, res) => {
   // 4. Añadir hosts Piped activos
   const pipedHosts = [
     'pipedapi.kavin.rocks',
-    'pipedapi.lunar.icu',
-    'piped-api.garudalinux.org',
-    'piped-api.lcomera.co',
-    'piped-api.privacy.com.de',
-    'pipedapi.r4fo.com'
+    'pipedapi.lunar.icu'
   ];
   pipedHosts.forEach(host => {
     promises.push(tryPipedHost(host).catch(e => {
-      // Registrar error pero permitir que siga la carrera
       throw new Error(`Piped [${host}] falló: ${e.message}`);
     }));
   });
 
-  // 5. Añadir clientes de yt-dlp
-  const ytdlpClients = ['android_music', 'tv_embedded', 'ios', 'mweb', 'web_creator'];
-  ytdlpClients.forEach(client => {
-    promises.push(tryYtdlpClient(client));
-  });
+  // 5. Añadir clientes de yt-dlp con carrera de proxies concurrente
+  if (process.env.RENDER || process.env.PORT) {
+    // En producción (Render): Correr android_music con los primeros 4 proxies funcionales en paralelo
+    const topProxies = PROXIES.slice(0, 4);
+    topProxies.forEach(proxy => {
+      promises.push(tryYtdlpClient('android_music', proxy));
+    });
+
+    // Correr tv_embedded con otros 2 proxies funcionales en paralelo
+    const tvProxies = PROXIES.slice(4, 6);
+    tvProxies.forEach(proxy => {
+      promises.push(tryYtdlpClient('tv_embedded', proxy));
+    });
+
+    // Correr android_music directo sin proxy por si acaso
+    promises.push(tryYtdlpClient('android_music', null));
+  } else {
+    // Localmente: Correr directos y rápidos
+    promises.push(tryYtdlpClient('android_music', null));
+    promises.push(tryYtdlpClient('tv_embedded', null));
+  }
 
   // --- Ejecución en paralelo con primer ganador (Promise.any) ---
   const cleanActiveProcesses = () => {
