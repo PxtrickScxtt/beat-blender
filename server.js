@@ -296,8 +296,11 @@ app.get('/api/audio/:videoId', async (req, res) => {
     args.push(ytUrl);
 
     return new Promise((resolve, reject) => {
-      const child = execFile(YT_DLP, args, { timeout: 25000, maxBuffer: 1024 * 1024 * 100 }, (error) => {
-        if (error) return reject(new Error(`yt-dlp [${playerClient}${suffix}]: ${error.message?.slice(0, 80)}`));
+      const child = execFile(YT_DLP, args, { timeout: 25000, maxBuffer: 1024 * 1024 * 100 }, (error, stdout, stderr) => {
+        if (error) {
+          const errMsg = (stderr || error.message || '').slice(0, 800);
+          return reject(new Error(`yt-dlp [${playerClient}${suffix}]: ${errMsg}`));
+        }
         const files = fs.readdirSync(tmpDir).filter(f => f.startsWith(`${filePrefix}-${playerClient}${suffix}`));
         if (files.length === 0) return reject(new Error(`yt-dlp [${playerClient}${suffix}]: no se generó archivo`));
         
