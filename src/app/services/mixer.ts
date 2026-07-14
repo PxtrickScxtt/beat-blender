@@ -936,6 +936,8 @@ export class MixerService {
     if (!isFinalFadeOut && !next) return;
     if (this.isFading) return;
 
+    console.log(`[MIXER] Iniciando crossfade. isFinalFadeOut: ${isFinalFadeOut}, currentTrack: ${this.currentTrack()?.title}`);
+
     this.isFading = true;
     const currentTrack = this.currentTrack()!;
     const fadeDuration = currentTrack.crossfadeTime * 1000;
