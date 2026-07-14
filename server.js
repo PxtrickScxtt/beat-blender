@@ -283,16 +283,17 @@ app.get('/api/audio/:videoId', async (req, res) => {
       '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       '--extractor-args', `youtube:player_client=${playerClient}`,
       '-f', 'bestaudio[ext=m4a]/bestaudio/best',
-      '-o', outputFile,
-      ytUrl
+      '-o', outputFile
     ];
 
     const proxy = proxyOverride || ((process.env.RENDER || process.env.PORT) ? getRandomProxy() : null);
     if (proxy) {
-      args.splice(7, 0, '--proxy', proxy);
+      args.push('--proxy', proxy);
     }
     const cookies = getCookiesFile();
     if (cookies) args.push('--cookies', cookies);
+
+    args.push(ytUrl);
 
     return new Promise((resolve, reject) => {
       const child = execFile(YT_DLP, args, { timeout: 25000, maxBuffer: 1024 * 1024 * 100 }, (error) => {
