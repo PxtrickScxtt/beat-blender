@@ -56,39 +56,17 @@ function getCookiesFile() {
 }
 
 const PROXIES = [
-  'http://etfaviqo:t5fqvjbx1r0k@45.43.65.113:6627',
   'http://etfaviqo:t5fqvjbx1r0k@104.253.223.76:5484',
-  'http://etfaviqo:t5fqvjbx1r0k@142.111.98.127:5828',
-  'http://etfaviqo:t5fqvjbx1r0k@198.89.123.23:6565',
   'http://etfaviqo:t5fqvjbx1r0k@46.203.210.192:5639',
-  'http://etfaviqo:t5fqvjbx1r0k@104.164.254.122:6801',
   'http://etfaviqo:t5fqvjbx1r0k@104.239.13.193:6822',
   'http://etfaviqo:t5fqvjbx1r0k@136.0.117.129:6867',
-  'http://etfaviqo:t5fqvjbx1r0k@142.147.128.175:6675',
-  'http://etfaviqo:t5fqvjbx1r0k@216.74.80.57:6629',
   'http://etfaviqo:t5fqvjbx1r0k@82.21.238.128:7931',
-  'http://etfaviqo:t5fqvjbx1r0k@142.147.132.21:6216',
   'http://etfaviqo:t5fqvjbx1r0k@82.24.212.82:5388',
   'http://etfaviqo:t5fqvjbx1r0k@191.101.41.254:6326',
-  'http://etfaviqo:t5fqvjbx1r0k@82.23.230.240:8044',
-  'http://etfaviqo:t5fqvjbx1r0k@107.173.132.42:6996',
-  'http://etfaviqo:t5fqvjbx1r0k@145.223.55.41:7088',
-  'http://etfaviqo:t5fqvjbx1r0k@152.232.123.129:6014',
-  'http://etfaviqo:t5fqvjbx1r0k@38.154.199.215:5369',
   'http://etfaviqo:t5fqvjbx1r0k@64.137.59.140:6733',
-  'http://etfaviqo:t5fqvjbx1r0k@104.239.105.136:6666',
-  'http://etfaviqo:t5fqvjbx1r0k@193.42.225.170:6661',
   'http://etfaviqo:t5fqvjbx1r0k@31.57.88.93:7166',
-  'http://etfaviqo:t5fqvjbx1r0k@31.58.20.45:5729',
   'http://etfaviqo:t5fqvjbx1r0k@104.253.48.175:5599',
-  'http://etfaviqo:t5fqvjbx1r0k@104.238.8.213:6071',
-  'http://etfaviqo:t5fqvjbx1r0k@206.206.118.140:6378',
-  'http://etfaviqo:t5fqvjbx1r0k@45.43.82.176:6170',
-  'http://etfaviqo:t5fqvjbx1r0k@192.198.126.70:7113',
-  'http://etfaviqo:t5fqvjbx1r0k@82.26.221.46:5387',
-  'http://etfaviqo:t5fqvjbx1r0k@192.241.94.24:6294',
-  'http://etfaviqo:t5fqvjbx1r0k@217.198.177.37:5553',
-  'http://etfaviqo:t5fqvjbx1r0k@38.154.199.45:5199'
+  'http://etfaviqo:t5fqvjbx1r0k@217.198.177.37:5553'
 ];
 
 function getRandomProxy() {
@@ -105,8 +83,8 @@ function getYtdlpBaseArgs() {
     '--geo-bypass',
     '--socket-timeout', '8',
     '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    // web_creator no requiere PO token y funciona desde IPs de servidores cloud
-    '--extractor-args', 'youtube:player_client=web_creator',
+    // android_music no requiere PO token y funciona desde IPs de servidores cloud
+    '--extractor-args', 'youtube:player_client=android_music',
   ];
 
   if (process.env.RENDER || process.env.PORT) {
@@ -531,7 +509,7 @@ app.get('/api/audio/:videoId', async (req, res) => {
   });
 
   // 5. Añadir clientes de yt-dlp
-  const ytdlpClients = ['mweb', 'web_creator', 'ios'];
+  const ytdlpClients = ['android_music', 'tv_embedded', 'ios', 'mweb', 'web_creator'];
   ytdlpClients.forEach(client => {
     promises.push(tryYtdlpClient(client));
   });
