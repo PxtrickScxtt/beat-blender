@@ -184,7 +184,7 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', engine: 'RapidAPI', message: 'BeatBlender Proxy' });
 });
 
-app.get('*', (req, res) => {
+app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'dist/beat-blender/browser/index.html'));
 });
 
