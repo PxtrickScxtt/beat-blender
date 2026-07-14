@@ -286,7 +286,7 @@ app.get('/api/audio/:videoId', async (req, res) => {
       '-o', outputFile
     ];
 
-    const proxy = proxyOverride || ((process.env.RENDER || process.env.PORT) ? getRandomProxy() : null);
+    const proxy = proxyOverride === 'DIRECT' ? null : (proxyOverride || ((process.env.RENDER || process.env.PORT) ? getRandomProxy() : null));
     if (proxy) {
       args.push('--proxy', proxy);
     }
@@ -298,8 +298,8 @@ app.get('/api/audio/:videoId', async (req, res) => {
     return new Promise((resolve, reject) => {
       const child = execFile(YT_DLP, args, { timeout: 25000, maxBuffer: 1024 * 1024 * 100 }, (error, stdout, stderr) => {
         if (error) {
-          const errMsg = (stderr || error.message || '').slice(0, 800);
-          return reject(new Error(`yt-dlp [${playerClient}${suffix}]: ${errMsg}`));
+          const actualError = stderr ? stderr.trim() : (error.code ? `Code: ${error.code}` : error.message);
+          return reject(new Error(`yt-dlp [${playerClient}${suffix}]: ${actualError.slice(0, 350)}`));
         }
         const files = fs.readdirSync(tmpDir).filter(f => f.startsWith(`${filePrefix}-${playerClient}${suffix}`));
         if (files.length === 0) return reject(new Error(`yt-dlp [${playerClient}${suffix}]: no se generó archivo`));
@@ -517,11 +517,11 @@ app.get('/api/audio/:videoId', async (req, res) => {
     });
 
     // Correr android_music directo sin proxy por si acaso
-    promises.push(tryYtdlpClient('android_music', null));
+    promises.push(tryYtdlpClient('android_music', 'DIRECT'));
   } else {
     // Localmente: Correr directos y rápidos
-    promises.push(tryYtdlpClient('android_music', null));
-    promises.push(tryYtdlpClient('tv_embedded', null));
+    promises.push(tryYtdlpClient('android_music', 'DIRECT'));
+    promises.push(tryYtdlpClient('tv_embedded', 'DIRECT'));
   }
 
   // --- Ejecución en paralelo con primer ganador (Promise.any) ---
