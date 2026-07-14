@@ -111,65 +111,28 @@ app.get('/api/audio/:videoId', async (req, res) => {
 });
 
 // ==========================================
-// 2. ENDPOINT: BÚSQUEDA (Piped Fallback)
+// 2. ENDPOINT: BÚSQUEDA (yt-search)
 // ==========================================
-async function searchViaPiped(query) {
-  const pipedHosts = [
-    'pipedapi.kavin.rocks',
-    'piped-api.garudalinux.org',
-    'piped-api.lcomera.co',
-    'pipedapi.r4fo.com'
-  ];
-
-  for (const host of pipedHosts) {
-    try {
-      console.log(`[BUSQUEDA] Intentando con Piped host: ${host}`);
-      const url = `https://${host}/search?q=${encodeURIComponent(query)}&filter=videos`;
-      
-      const json = await new Promise((resolve, reject) => {
-        const req = https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 8000 }, (apiRes) => {
-          if (apiRes.statusCode !== 200) {
-            apiRes.resume();
-            return reject(new Error(`Piped API ${host} status ${apiRes.statusCode}`));
-          }
-          let data = '';
-          apiRes.on('data', chunk => data += chunk);
-          apiRes.on('end', () => {
-            try { resolve(JSON.parse(data)); }
-            catch(e) { reject(new Error(`Piped API ${host} JSON inválido`)); }
-          });
-        });
-        req.on('error', reject);
-        req.on('timeout', () => {
-          req.destroy();
-          reject(new Error(`Piped API ${host} timeout`));
-        });
-      });
-
-      if (json && json.items && json.items.length > 0) {
-        console.log(`[BUSQUEDA] Búsqueda exitosa usando Piped host: ${host}`);
-        return json.items.map(item => {
-          const videoId = item.url ? item.url.replace('/watch?v=', '') : '';
-          return {
-            videoId: videoId,
-            title: item.title || 'Sin título',
-            artist: item.uploaderName || 'Canal Desconocido',
-            thumbnail: item.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-            duration: item.duration || 0
-          };
-        }).filter(item => item.videoId);
-      }
-    } catch (e) {
-      console.warn(`[BUSQUEDA] Falló Piped host ${host}: ${e.message}`);
-    }
-  }
-  throw new Error('Todos los servidores de búsqueda fallaron');
-}
-
 app.get('/api/search/:query', async (req, res) => {
   const { query } = req.params;
   try {
-    const results = await searchViaPiped(query);
+    console.log(`[BUSQUEDA] Buscando en YouTube: "${query}"`);
+    const ytSearch = require('yt-search');
+    const r = await ytSearch(query);
+    const videos = r.videos.slice(0, 15);
+    
+    if (videos.length === 0) {
+      return res.json([]);
+    }
+
+    const results = videos.map(v => ({
+      videoId: v.videoId,
+      title: v.title,
+      artist: v.author.name,
+      thumbnail: v.thumbnail,
+      duration: v.seconds
+    }));
+
     res.json(results);
   } catch (err) {
     console.error(`[ERROR] Búsqueda fallida para "${query}":`, err.message);
