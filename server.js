@@ -79,6 +79,7 @@ function getRandomProxy() {
 function getYtdlpBaseArgs() {
   const args = [
     '--no-warnings',
+    '--force-ipv4',
     '--no-check-certificates',
     '--geo-bypass',
     '--socket-timeout', '8',
@@ -277,6 +278,7 @@ app.get('/api/audio/:videoId', async (req, res) => {
     const args = [
       '--no-playlist',
       '--no-warnings',
+      '--force-ipv4',
       '--no-check-certificates',
       '--geo-bypass',
       '--socket-timeout', '10',
