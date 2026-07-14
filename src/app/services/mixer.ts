@@ -904,8 +904,12 @@ export class MixerService {
       const currentPlayback = this.currentPlaybackTime();
 
       // Verificar si es hora de iniciar el crossfade automático
-      if (this.isPlaying() && !this.isFading && this.nextTrack() && currentPlayback >= fadeStart) {
-        this.triggerCrossfade();
+      if (this.isPlaying() && !this.isFading && currentPlayback >= fadeStart) {
+        if (this.nextTrack()) {
+          this.triggerCrossfade(false);
+        } else {
+          this.triggerCrossfade(true);
+        }
       }
 
       // Si llegó al final absoluto de la canción y no hay siguiente, detener
@@ -925,11 +929,12 @@ export class MixerService {
   }
 
   /**
-   * Ejecuta la mezcla (crossfade) de la pista actual a la siguiente
+   * Ejecuta la mezcla (crossfade) de la pista actual a la siguiente o hace fadeout
    */
-  private triggerCrossfade(): void {
+  private triggerCrossfade(isFinalFadeOut: boolean = false): void {
     const next = this.nextTrack();
-    if (!next || this.isFading) return;
+    if (!isFinalFadeOut && !next) return;
+    if (this.isFading) return;
 
     this.isFading = true;
     const currentTrack = this.currentTrack()!;
@@ -941,13 +946,15 @@ export class MixerService {
     const toPlayer = fromPlayer === 'A' ? 'B' : 'A';
     
     // Iniciar reproducción
-    if (next.source === 'local') {
-      const nextAudio = toPlayer === 'A' ? this.audioA : this.audioB;
-      nextAudio.play().catch(err => console.warn('Error al iniciar audio local en crossfade:', err));
-    } else {
-      const nextPlayerObj = toPlayer === 'A' ? this.playerA : this.playerB;
-      if (nextPlayerObj) {
-        nextPlayerObj.playVideo();
+    if (!isFinalFadeOut && next) {
+      if (next.source === 'local') {
+        const nextAudio = toPlayer === 'A' ? this.audioA : this.audioB;
+        nextAudio.play().catch(err => console.warn('Error al iniciar audio local en crossfade:', err));
+      } else {
+        const nextPlayerObj = toPlayer === 'A' ? this.playerA : this.playerB;
+        if (nextPlayerObj) {
+          nextPlayerObj.playVideo();
+        }
       }
     }
 
@@ -985,6 +992,13 @@ export class MixerService {
             try { prevPlayerObj.stopVideo(); } catch(e) {}
             prevPlayerObj.setVolume(0);
           }
+        }
+
+        if (isFinalFadeOut) {
+          this.stop();
+          this.crossfaderValue.set(startCrossfaderVal); // Reset crossfader to where it was for next play
+          this.isFading = false;
+          return;
         }
 
         // Intercambiar reproductor activo principal
