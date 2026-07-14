@@ -1159,23 +1159,13 @@ export class MixerService {
         // Configuración inicial de ganancia
         gainNode.gain.setValueAtTime(0, scheduleTime);
 
-        if (i === 0) {
-          // Primera canción empieza a volumen completo
-          gainNode.gain.setValueAtTime(masterVolCoeff, scheduleTime);
-        } else {
-          // Fade in gradual desde el inicio del overlap
-          gainNode.gain.linearRampToValueAtTime(masterVolCoeff, scheduleTime + fadeTime);
-        }
+        // Siempre aplicar fade-in (incluso a la primera/única canción para suavidad)
+        gainNode.gain.linearRampToValueAtTime(masterVolCoeff, scheduleTime + fadeTime);
 
-        if (i < queue.length - 1) {
-          // Fade out gradual antes de terminar
-          const fadeOutStart = scheduleTime + duration - fadeTime;
-          gainNode.gain.setValueAtTime(masterVolCoeff, fadeOutStart);
-          gainNode.gain.linearRampToValueAtTime(0, scheduleTime + duration);
-        } else {
-          // Última canción reproduce a volumen completo hasta el final
-          gainNode.gain.setValueAtTime(masterVolCoeff, scheduleTime + duration);
-        }
+        // Siempre aplicar fade-out al final (incluso a la última/única canción)
+        const fadeOutStart = scheduleTime + duration - fadeTime;
+        gainNode.gain.setValueAtTime(masterVolCoeff, fadeOutStart);
+        gainNode.gain.linearRampToValueAtTime(0, scheduleTime + duration);
 
         // Programar inicio y fin de reproducción de la pista recortada
         sourceNode.start(scheduleTime, startSec, duration);
