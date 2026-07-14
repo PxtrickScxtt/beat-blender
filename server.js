@@ -55,131 +55,7 @@ function getCookiesFile() {
   return cookiesFilePath;
 }
 
-const PROXIES = [
-  'http://etfaviqo:t5fqvjbx1r0k@104.253.223.76:5484',
-  'http://etfaviqo:t5fqvjbx1r0k@46.203.210.192:5639',
-  'http://etfaviqo:t5fqvjbx1r0k@104.239.13.193:6822',
-  'http://etfaviqo:t5fqvjbx1r0k@136.0.117.129:6867',
-  'http://etfaviqo:t5fqvjbx1r0k@82.21.238.128:7931',
-  'http://etfaviqo:t5fqvjbx1r0k@82.24.212.82:5388',
-  'http://etfaviqo:t5fqvjbx1r0k@191.101.41.254:6326',
-  'http://etfaviqo:t5fqvjbx1r0k@64.137.59.140:6733',
-  'http://etfaviqo:t5fqvjbx1r0k@31.57.88.93:7166',
-  'http://etfaviqo:t5fqvjbx1r0k@104.253.48.175:5599',
-  'http://etfaviqo:t5fqvjbx1r0k@217.198.177.37:5553'
-];
-
-function getRandomProxy() {
-  return PROXIES[Math.floor(Math.random() * PROXIES.length)];
-}
-
-/**
- * Devuelve los argumentos base para yt-dlp incluyendo cookies si están disponibles
- */
-function getYtdlpBaseArgs() {
-  const args = [
-    '--no-warnings',
-    '--force-ipv4',
-    '--no-check-certificates',
-    '--geo-bypass',
-    '--socket-timeout', '8',
-    '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    // android_music no requiere PO token y funciona desde IPs de servidores cloud
-    '--extractor-args', 'youtube:player_client=android_music',
-  ];
-
-  if (process.env.RENDER || process.env.PORT) {
-    const proxy = getRandomProxy();
-    args.push('--proxy', proxy);
-  }
-
-  const cookies = getCookiesFile();
-  if (cookies) {
-    args.push('--cookies', cookies);
-  }
-  return args;
-}
-
-/**
- * Intenta descargar via cobalt.tools API usando una de las instancias publicas
- */
-async function downloadViaCobalt(videoId, apiHost = 'cblt.fariz.dev') {
-  const https = require('https');
-  const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
-  const body = JSON.stringify({ url: youtubeUrl, downloadMode: 'audio', audioFormat: 'best' });
-  return new Promise((resolve, reject) => {
-    const req = https.request({
-      hostname: apiHost,
-      path: '/',
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'User-Agent': 'BeatBlender/1.0', 'Content-Length': Buffer.byteLength(body) }
-    }, (res2) => {
-      let data = '';
-      res2.on('data', chunk => data += chunk);
-      res2.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          if (json.url) resolve(json.url);
-          else reject(new Error(`Cobalt [${apiHost}]: ${json.error?.code || JSON.stringify(json)}`));
-        } catch(e) { reject(new Error(`Cobalt [${apiHost}]: respuesta invalida`)); }
-      });
-    });
-    req.on('error', reject);
-    req.setTimeout(12000, () => { req.destroy(); reject(new Error(`Cobalt [${apiHost}]: timeout`)); });
-    req.write(body);
-    req.end();
-  });
-}
-
-/**
- * Intenta descargar via SaveNow (loader.to backend) con polling de progreso
- */
-async function downloadViaSaveNow(videoId) {
-  const https = require('https');
-  const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
-  const initUrl = `https://p.savenow.to/api/v2/download?button=1&format=mp3&url=${encodeURIComponent(ytUrl)}`;
-  
-  const getJson = (url) => new Promise((resolve, reject) => {
-    https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); }
-        catch(e) { reject(new Error('JSON invalido')); }
-      });
-    }).on('error', reject);
-  });
-
-  console.log('[SAVENOW] Iniciando conversión...');
-  const initData = await getJson(initUrl);
-  if (!initData.success || !initData.id) {
-    throw new Error('SaveNow init falló');
-  }
-
-  const taskId = initData.id;
-  const progressUrl = `https://p.savenow.to/api/progress?id=${taskId}`;
-
-  for (let i = 0; i < 35; i++) { // Max 70 segundos para dar margen en conversiones lentas
-    await new Promise(r => setTimeout(r, 2000));
-    console.log(`[SAVENOW] Consultando progreso (intento ${i+1})...`);
-    try {
-      const progressData = await getJson(progressUrl);
-      if (progressData.success === 1 && progressData.download_url) {
-        return progressData.download_url;
-      }
-      if (progressData.success === 0 && progressData.error) {
-        throw new Error(`SaveNow API error: ${progressData.error}`);
-      }
-    } catch (err) {
-      console.warn(`[SAVENOW] Advertencia (intento ${i+1}): ${err.message}. Reintentando...`);
-      if (err.message.includes('SaveNow API error')) {
-        throw err;
-      }
-      // Si es un error temporal de conexión o JSON inválido, continuamos reintentando
-    }
-  }
-  throw new Error('SaveNow timeout');
-}
+// yt-dlp y Proxies han sido removidos en favor de RapidAPI
 
 /**
  * Endpoint: GET /api/audio/:videoId
@@ -318,258 +194,86 @@ app.get('/api/audio/:videoId', async (req, res) => {
           }
           console.log(`[CARRERA] -> ¡yt-dlp con ${playerClient}${suffix} ha GANADO la carrera!`);
           const stream = fs.createReadStream(filePath);
-          
-          // Limpieza al cerrar la descarga
-          const cleanFile = () => { try { fs.unlinkSync(filePath); } catch(e) {} };
-          stream.on('end', cleanFile);
-          stream.on('close', cleanFile);
-          stream.on('error', cleanFile);
+  console.log(`[RAPIDAPI] Solicitando audio para: ${videoId}`);
 
-          resolve({
-            stream: stream,
-            contentType: 'audio/mp4',
-            contentLength: stat.size,
-            filename: `${videoId}.m4a`
-          });
-        } catch (e) {
-          reject(e);
-        }
-      });
-      activeProcesses.push(child);
-    });
-  };
-
-  // --- MOTOR 4: Invidious Host ---
-  const tryInvidiousHost = async (host) => {
-    console.log(`[CARRERA] -> Iniciando Invidious en ${host}...`);
-    const invidiousUrl = `https://${host}/latest_version?id=${videoId}&itag=140&local=true`;
-    return new Promise((resolve, reject) => {
-      const https = require('https');
-      const http = require('http');
-      const client = invidiousUrl.startsWith('https') ? https : http;
-      
-      const streamReq = client.get(invidiousUrl, {
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        timeout: 20000
-      }, (audioRes) => {
-        if (audioRes.statusCode !== 200 && audioRes.statusCode !== 302) {
-          audioRes.resume();
-          return reject(new Error(`Invidious [${host}]: HTTP ${audioRes.statusCode}`));
-        }
-        
-        // Si hay redirección (302)
-        if (audioRes.statusCode === 302 && audioRes.headers.location) {
-          const redirectUrl = audioRes.headers.location;
-          const redirectClient = redirectUrl.startsWith('https') ? https : http;
-          redirectClient.get(redirectUrl, { timeout: 20000 }, (redirRes) => {
-            if (redirRes.statusCode !== 200) {
-              redirRes.resume();
-              return reject(new Error(`Invidious [${host}] Redir: HTTP ${redirRes.statusCode}`));
-            }
-            const contentLength = parseInt(redirRes.headers['content-length'] || '-1');
-            if (contentLength === 0 || (contentLength > 0 && contentLength < 10000)) {
-              redirRes.resume();
-              return reject(new Error(`Invidious [${host}] Redir: tamaño inválido`));
-            }
-            console.log(`[CARRERA] -> ¡Invidious en ${host} ha GANADO la carrera!`);
-            resolve({
-              stream: redirRes,
-              contentType: redirRes.headers['content-type'] || 'audio/mp4',
-              contentLength: contentLength > 0 ? contentLength : null,
-              filename: `${videoId}.m4a`
-            });
-          }).on('error', reject);
-          return;
-        }
-
-        const contentLength = parseInt(audioRes.headers['content-length'] || '-1');
-        if (contentLength === 0 || (contentLength > 0 && contentLength < 10000)) {
-          audioRes.resume();
-          return reject(new Error(`Invidious [${host}]: tamaño inválido`));
-        }
-        console.log(`[CARRERA] -> ¡Invidious en ${host} ha GANADO la carrera!`);
-        resolve({
-          stream: audioRes,
-          contentType: audioRes.headers['content-type'] || 'audio/mp4',
-          contentLength: contentLength > 0 ? contentLength : null,
-          filename: `${videoId}.m4a`
-        });
-      });
-      streamReq.on('error', reject);
-      streamReq.on('timeout', () => {
-        streamReq.destroy();
-        reject(new Error(`Invidious [${host}]: timeout`));
-      });
-    });
-  };
-
-  // --- MOTOR 5: Piped Host ---
-  const tryPipedHost = async (host) => {
-    console.log(`[CARRERA] -> Iniciando Piped en ${host}...`);
-    const apiUrl = `https://${host}/streams/${videoId}`;
-    
-    // Obtener metadatos de los streams
-    const getStreamsJson = () => new Promise((resolve, reject) => {
-      const https = require('https');
-      const req = https.get(apiUrl, { 
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        timeout: 12000 
-      }, (apiRes) => {
-        if (apiRes.statusCode !== 200) {
-          apiRes.resume();
-          return reject(new Error(`Piped API ${host} status ${apiRes.statusCode}`));
-        }
-        let data = '';
-        apiRes.on('data', chunk => data += chunk);
-        apiRes.on('end', () => {
-          try { resolve(JSON.parse(data)); }
-          catch(e) { reject(new Error(`Piped API ${host} JSON inválido`)); }
-        });
-      });
-      req.on('error', reject);
-      req.on('timeout', () => { req.destroy(); reject(new Error(`Piped API ${host} timeout`)); });
-    });
-
-    const data = await getStreamsJson();
-    if (!data.audioStreams || data.audioStreams.length === 0) {
-      throw new Error(`Piped [${host}]: Sin streams de audio`);
+  const https = require('https');
+  const options = {
+    hostname: 'youtube-mp36.p.rapidapi.com',
+    port: 443,
+    path: `/dl?id=${videoId}`,
+    method: 'GET',
+    headers: {
+      'x-rapidapi-host': 'youtube-mp36.p.rapidapi.com',
+      'x-rapidapi-key': '2c9f165934msh23fc2f9df36b684p127d8ejsnf3adda3bf495'
     }
-
-    const streamUrl = data.audioStreams[0].url;
-    if (!streamUrl) throw new Error(`Piped [${host}]: URL de stream vacía`);
-
-    // Descargar el stream de audio
-    return new Promise((resolve, reject) => {
-      const https = require('https');
-      const http = require('http');
-      const client = streamUrl.startsWith('https') ? https : http;
-
-      const audioReq = client.get(streamUrl, { 
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        timeout: 25000 
-      }, (audioRes) => {
-        if (audioRes.statusCode !== 200) {
-          audioRes.resume();
-          return reject(new Error(`Piped Stream [${host}] HTTP ${audioRes.statusCode}`));
-        }
-        const contentLength = parseInt(audioRes.headers['content-length'] || '-1');
-        if (contentLength === 0 || (contentLength > 0 && contentLength < 10000)) {
-          audioRes.resume();
-          return reject(new Error(`Piped Stream [${host}] tamaño inválido`));
-        }
-        console.log(`[CARRERA] -> ¡Piped en ${host} ha GANADO la carrera!`);
-        resolve({
-          stream: audioRes,
-          contentType: audioRes.headers['content-type'] || 'audio/webm',
-          contentLength: contentLength > 0 ? contentLength : null,
-          filename: `${videoId}.webm`
-        });
-      });
-      audioReq.on('error', reject);
-      audioReq.on('timeout', () => { audioReq.destroy(); reject(new Error(`Piped Stream [${host}] timeout`)); });
-    });
-  };
-
-  // --- Lista de promesas para correr en paralelo ---
-  const promises = [];
-
-  // 1. Añadir SaveNow
-  promises.push(trySaveNow());
-
-  // 2. Añadir hosts Cobalt activos
-  const cobaltHosts = [
-    'cblt.fariz.dev',
-    'cobalt.hpko.xyz',
-    'cobalt.drgns.space',
-    'rue-cobalt.xenon.zone'
-  ];
-  cobaltHosts.forEach(host => {
-    promises.push(tryCobaltHost(host));
-  });
-
-  // 3. Añadir hosts Invidious activos
-  const invidiousHosts = [
-    'invidious.projectsegfau.lt',
-    'vid.puffyan.us'
-  ];
-  invidiousHosts.forEach(host => {
-    promises.push(tryInvidiousHost(host));
-  });
-
-  // 4. Añadir hosts Piped activos
-  const pipedHosts = [
-    'pipedapi.kavin.rocks',
-    'pipedapi.lunar.icu'
-  ];
-  pipedHosts.forEach(host => {
-    promises.push(tryPipedHost(host).catch(e => {
-      throw new Error(`Piped [${host}] falló: ${e.message}`);
-    }));
-  });
-
-  // 5. Añadir clientes de yt-dlp con carrera de proxies concurrente
-  if (process.env.RENDER || process.env.PORT) {
-    // En producción (Render): Correr android_music con los primeros 4 proxies funcionales en paralelo
-    const topProxies = PROXIES.slice(0, 4);
-    topProxies.forEach(proxy => {
-      promises.push(tryYtdlpClient('android_music', proxy));
-    });
-
-    // Correr tv_embedded con otros 2 proxies funcionales en paralelo
-    const tvProxies = PROXIES.slice(4, 6);
-    tvProxies.forEach(proxy => {
-      promises.push(tryYtdlpClient('tv_embedded', proxy));
-    });
-
-    // Correr android_music directo sin proxy por si acaso
-    promises.push(tryYtdlpClient('android_music', 'DIRECT'));
-  } else {
-    // Localmente: Correr directos y rápidos
-    promises.push(tryYtdlpClient('android_music', 'DIRECT'));
-    promises.push(tryYtdlpClient('tv_embedded', 'DIRECT'));
-  }
-
-  // --- Ejecución en paralelo con primer ganador (Promise.any) ---
-  const cleanActiveProcesses = () => {
-    activeProcesses.forEach(child => {
-      try { child.kill('SIGKILL'); } catch(e) {}
-    });
   };
 
   try {
-    // Implementación manual de Promise.any para compatibilidad y recolección de logs
-    const winner = await new Promise((resolveRace, rejectRace) => {
-      let completed = 0;
-      const errors = [];
-      promises.forEach((p, idx) => {
-        Promise.resolve(p)
-          .then((resVal) => {
-            resolveRace(resVal);
-          })
-          .catch((err) => {
-            errors.push(err.message);
-            completed++;
-            if (completed === promises.length) {
-              rejectRace(new Error("Todos los motores de descarga fallaron:\n" + errors.map(e => ` - ${e}`).join("\n")));
-            }
-          });
+    const apiResponse = await new Promise((resolve, reject) => {
+      const reqApi = https.request(options, apiRes => {
+        let body = '';
+        apiRes.on('data', d => body += d);
+        apiRes.on('end', () => {
+          try {
+            resolve(JSON.parse(body));
+          } catch(e) {
+            reject(new Error('Respuesta inválida de RapidAPI'));
+          }
+        });
       });
+      reqApi.on('error', reject);
+      reqApi.setTimeout(25000, () => {
+        reqApi.destroy();
+        reject(new Error('Timeout de RapidAPI'));
+      });
+      reqApi.end();
     });
 
-    // Detener los otros procesos de yt-dlp para ahorrar CPU/disco en Render
-    cleanActiveProcesses();
+    if (apiResponse.status !== 'ok' || !apiResponse.link) {
+      throw new Error(`RapidAPI Error: ${apiResponse.msg || 'Link no encontrado'}`);
+    }
 
-    // Servir stream ganador
-    res.setHeader('Content-Type', winner.contentType);
-    if (winner.contentLength) res.setHeader('Content-Length', winner.contentLength);
-    res.setHeader('Content-Disposition', `attachment; filename="${winner.filename}"`);
+    console.log(`[RAPIDAPI] Enlace obtenido con éxito. Descargando stream...`);
+
+    const downloadUrl = apiResponse.link;
+    const client = downloadUrl.startsWith('https') ? https : require('http');
+
+    const streamReq = client.get(downloadUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (audioRes) => {
+      if (audioRes.statusCode !== 200 && audioRes.statusCode !== 302) {
+        audioRes.resume();
+        return res.status(502).json({ error: `Stream HTTP ${audioRes.statusCode}` });
+      }
+
+      const serveStream = (responseStream) => {
+        res.setHeader('Content-Type', responseStream.headers['content-type'] || 'audio/mpeg');
+        const cl = responseStream.headers['content-length'];
+        if (cl) res.setHeader('Content-Length', cl);
+        res.setHeader('Content-Disposition', `attachment; filename="${videoId}.mp3"`);
+        responseStream.pipe(res);
+      };
+
+      if (audioRes.statusCode === 302 && audioRes.headers.location) {
+        const redirUrl = audioRes.headers.location;
+        const redirClient = redirUrl.startsWith('https') ? https : require('http');
+        redirClient.get(redirUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (redirRes) => {
+            if (redirRes.statusCode !== 200) {
+              redirRes.resume();
+              return res.status(502).json({ error: `Redir Stream HTTP ${redirRes.statusCode}` });
+            }
+            serveStream(redirRes);
+        }).on('error', e => res.status(502).json({ error: e.message }));
+        return;
+      }
+
+      serveStream(audioRes);
+    });
+
+    streamReq.on('error', e => res.status(502).json({ error: e.message }));
     
-    winner.stream.pipe(res);
-  } catch (raceError) {
-    cleanActiveProcesses();
-    console.error(`[CARRERA FALLIDA]`, raceError.message);
+  } catch(error) {
+    console.error(`[ERROR RAPIDAPI]`, error.message);
     if (!res.headersSent) {
-      res.status(502).json({ error: raceError.message });
+      res.status(502).json({ error: error.message });
     }
   }
 });
