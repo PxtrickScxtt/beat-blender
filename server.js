@@ -61,46 +61,11 @@ app.get('/api/audio/:videoId', async (req, res) => {
       throw new Error(`RapidAPI Error: ${apiResponse.msg || 'Link no encontrado'}`);
     }
 
-    console.log(`[RAPIDAPI] Enlace obtenido con éxito. Descargando stream...`);
+    console.log(`[RAPIDAPI] Enlace obtenido con éxito. Redirigiendo cliente al stream...`);
 
     const downloadUrl = apiResponse.link;
-    const client = downloadUrl.startsWith('https') ? https : http;
-
-    const streamReq = client.get(downloadUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (audioRes) => {
-      if (audioRes.statusCode !== 200 && audioRes.statusCode !== 302) {
-        audioRes.resume();
-        return res.status(502).json({ error: `Stream HTTP ${audioRes.statusCode}` });
-      }
-
-      const serveStream = (responseStream) => {
-        res.setHeader('Content-Type', responseStream.headers['content-type'] || 'audio/mpeg');
-        const cl = responseStream.headers['content-length'];
-        if (cl) res.setHeader('Content-Length', cl);
-        res.setHeader('Content-Disposition', `attachment; filename="${videoId}.mp3"`);
-        responseStream.pipe(res);
-      };
-
-      if (audioRes.statusCode === 302 && audioRes.headers.location) {
-        const redirUrl = audioRes.headers.location;
-        const redirClient = redirUrl.startsWith('https') ? https : http;
-        redirClient.get(redirUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (redirRes) => {
-            if (redirRes.statusCode !== 200) {
-              redirRes.resume();
-              return res.status(502).json({ error: `Redir Stream HTTP ${redirRes.statusCode}` });
-            }
-            serveStream(redirRes);
-        }).on('error', e => {
-          if (!res.headersSent) res.status(502).json({ error: e.message });
-        });
-        return;
-      }
-
-      serveStream(audioRes);
-    });
-
-    streamReq.on('error', e => {
-      if (!res.headersSent) res.status(502).json({ error: e.message });
-    });
+    // Redirigimos al cliente para que su navegador descargue directamente el archivo y bypass el bloqueo de IP de Render.
+    res.redirect(302, downloadUrl);
     
   } catch(error) {
     console.error(`[ERROR RAPIDAPI]`, error.message);
