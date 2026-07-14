@@ -284,7 +284,7 @@ app.get('/api/audio/:videoId', async (req, res) => {
       '--socket-timeout', '10',
       '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       '--extractor-args', `youtube:player_client=${playerClient}`,
-      '-f', 'bestaudio[ext=m4a]/bestaudio/best',
+      '-f', 'bestaudio',
       '-o', outputFile
     ];
 
