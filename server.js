@@ -271,8 +271,8 @@ app.get('/api/audio/:videoId', async (req, res) => {
   };
 
   const tryYtdlpClient = async (playerClient, proxyOverride = null) => {
-    const suffix = proxyOverride ? '-' + proxyOverride.split('@')[1].replace(/[:.]/g, '_') : '-direct';
-    console.log(`[CARRERA] -> Iniciando yt-dlp con client=${playerClient}${proxyOverride ? ' usando proxy ' + suffix : ' (directo)'}...`);
+    const suffix = (proxyOverride && proxyOverride !== 'DIRECT') ? '-' + proxyOverride.split('@')[1].replace(/[:.]/g, '_') : '-direct';
+    console.log(`[CARRERA] -> Iniciando yt-dlp con client=${playerClient}${proxyOverride && proxyOverride !== 'DIRECT' ? ' usando proxy ' + suffix : ' (directo)'}...`);
     const outputFile = path.join(tmpDir, `${filePrefix}-${playerClient}${suffix}.%(ext)s`);
     const args = [
       '--no-playlist',
@@ -298,7 +298,10 @@ app.get('/api/audio/:videoId', async (req, res) => {
     return new Promise((resolve, reject) => {
       const child = execFile(YT_DLP, args, { timeout: 25000, maxBuffer: 1024 * 1024 * 100 }, (error, stdout, stderr) => {
         if (error) {
-          const actualError = stderr ? stderr.trim() : (error.code ? `Code: ${error.code}` : error.message);
+          let actualError = stderr ? stderr.trim() : '';
+          if (!actualError) {
+            actualError = error.killed ? `TIMEOUT or KILLED (Signal: ${error.signal})` : error.message;
+          }
           return reject(new Error(`yt-dlp [${playerClient}${suffix}]: ${actualError.slice(0, 350)}`));
         }
         const files = fs.readdirSync(tmpDir).filter(f => f.startsWith(`${filePrefix}-${playerClient}${suffix}`));
