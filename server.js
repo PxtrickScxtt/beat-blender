@@ -100,8 +100,9 @@ app.get('/api/search/:query', async (req, res) => {
 
     res.json(results);
   } catch (err) {
-    console.error(`[ERROR] Búsqueda fallida para "${query}":`, err.message);
-    res.status(500).json({ error: err.message });
+    const errorMsg = err && err.message ? err.message : String(err);
+    console.error(`[ERROR] Búsqueda fallida para "${query}":`, errorMsg, err);
+    res.status(500).json({ error: errorMsg });
   }
 });
 
