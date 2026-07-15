@@ -113,9 +113,7 @@ async function searchInvidious(query) {
           videoId: v.videoId,
           title: v.title,
           artist: v.author || 'Canal Desconocido',
-          thumbnail: v.videoThumbnails && v.videoThumbnails.length > 0 
-            ? v.videoThumbnails[v.videoThumbnails.length - 1].url 
-            : `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`,
+          thumbnail: `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`,
           duration: v.lengthSeconds || 0
         }));
       }
