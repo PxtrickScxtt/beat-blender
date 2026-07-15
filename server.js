@@ -82,21 +82,55 @@ app.get('/api/search/:query', async (req, res) => {
   const { query } = req.params;
   try {
     console.log(`[BUSQUEDA] Buscando en YouTube: "${query}"`);
-    const ytSearch = require('yt-search');
-    const r = await ytSearch(query);
-    const videos = r.videos.slice(0, 15);
+    let results = [];
+    let err1 = null;
+
+    try {
+      const ytSearch = require('yt-search');
+      const r = await ytSearch(query);
+      const videos = r.videos.slice(0, 15);
+      
+      results = videos.map(v => ({
+        videoId: v.videoId,
+        title: v.title,
+        artist: v.author.name,
+        thumbnail: v.thumbnail,
+        duration: v.seconds
+      }));
+    } catch (e1) {
+      err1 = e1 && e1.message ? e1.message : String(e1);
+      console.warn(`[BUSQUEDA] yt-search falló (${err1}), intentando fallback con youtube-search-api...`);
+      
+      const ytSearchApi = require('youtube-search-api');
+      const r2 = await ytSearchApi.GetListByKeyword(query, false, 15);
+      
+      if (r2 && r2.items) {
+        results = r2.items.filter(item => item.type === 'video').map(v => {
+          let seconds = 0;
+          if (v.length && v.length.simpleText) {
+            const parts = v.length.simpleText.split(':').reverse();
+            seconds += parseInt(parts[0] || '0', 10);
+            seconds += parseInt(parts[1] || '0', 10) * 60;
+            if (parts[2]) seconds += parseInt(parts[2], 10) * 3600;
+          }
+          return {
+            videoId: v.id,
+            title: v.title,
+            artist: v.channelTitle || 'Canal Desconocido',
+            thumbnail: v.thumbnail.thumbnails && v.thumbnail.thumbnails.length > 0 
+                       ? v.thumbnail.thumbnails[v.thumbnail.thumbnails.length - 1].url 
+                       : `https://i.ytimg.com/vi/${v.id}/hqdefault.jpg`,
+            duration: seconds
+          };
+        });
+      } else {
+        throw new Error('youtube-search-api no devolvió resultados.');
+      }
+    }
     
-    if (videos.length === 0) {
+    if (results.length === 0) {
       return res.json([]);
     }
-
-    const results = videos.map(v => ({
-      videoId: v.videoId,
-      title: v.title,
-      artist: v.author.name,
-      thumbnail: v.thumbnail,
-      duration: v.seconds
-    }));
 
     res.json(results);
   } catch (err) {
