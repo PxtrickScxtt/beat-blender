@@ -78,64 +78,63 @@ app.get('/api/audio/:videoId', async (req, res) => {
 // ==========================================
 // 2. ENDPOINT: BÚSQUEDA (yt-search)
 // ==========================================
+const invidiousInstances = [
+  'inv.zoomerville.com',
+  'yt.chocolatemoo53.com',
+  'invidious.f5.si'
+];
+
+async function searchInvidious(query) {
+  for (const host of invidiousInstances) {
+    try {
+      console.log(`[BUSQUEDA] Intentando Invidious API en: ${host}`);
+      const url = `https://${host}/api/v1/search?q=${encodeURIComponent(query)}`;
+      
+      const json = await new Promise((resolve, reject) => {
+        const req = https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, timeout: 8000 }, (res) => {
+          if (res.statusCode !== 200) {
+            res.resume();
+            return reject(new Error(`Status ${res.statusCode}`));
+          }
+          let data = '';
+          res.on('data', chunk => data += chunk);
+          res.on('end', () => {
+            try { resolve(JSON.parse(data)); }
+            catch(e) { reject(new Error('Invalid JSON')); }
+          });
+        });
+        req.on('error', reject);
+        req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')); });
+      });
+
+      const videos = json.filter(item => item.type === 'video').slice(0, 15);
+      if (videos.length > 0) {
+        return videos.map(v => ({
+          videoId: v.videoId,
+          title: v.title,
+          artist: v.author || 'Canal Desconocido',
+          thumbnail: v.videoThumbnails && v.videoThumbnails.length > 0 
+            ? v.videoThumbnails[v.videoThumbnails.length - 1].url 
+            : `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`,
+          duration: v.lengthSeconds || 0
+        }));
+      }
+    } catch (e) {
+      console.warn(`[BUSQUEDA] Falló Invidious host ${host}:`, e.message);
+    }
+  }
+  throw new Error('Todos los servidores de Invidious fallaron (bloqueo de IP o caídos).');
+}
+
 app.get('/api/search/:query', async (req, res) => {
   const { query } = req.params;
   try {
     console.log(`[BUSQUEDA] Buscando en YouTube: "${query}"`);
-    let results = [];
-    let err1 = null;
-
-    try {
-      const ytSearch = require('yt-search');
-      const r = await ytSearch(query);
-      const videos = r.videos.slice(0, 15);
-      
-      results = videos.map(v => ({
-        videoId: v.videoId,
-        title: v.title,
-        artist: v.author.name,
-        thumbnail: v.thumbnail,
-        duration: v.seconds
-      }));
-    } catch (e1) {
-      err1 = e1 && e1.message ? e1.message : String(e1);
-      console.warn(`[BUSQUEDA] yt-search falló (${err1}), intentando fallback con youtube-search-api...`);
-      
-      const ytSearchApi = require('youtube-search-api');
-      const r2 = await ytSearchApi.GetListByKeyword(query, false, 15);
-      
-      if (r2 && r2.items) {
-        results = r2.items.filter(item => item.type === 'video').map(v => {
-          let seconds = 0;
-          if (v.length && v.length.simpleText) {
-            const parts = v.length.simpleText.split(':').reverse();
-            seconds += parseInt(parts[0] || '0', 10);
-            seconds += parseInt(parts[1] || '0', 10) * 60;
-            if (parts[2]) seconds += parseInt(parts[2], 10) * 3600;
-          }
-          return {
-            videoId: v.id,
-            title: v.title,
-            artist: v.channelTitle || 'Canal Desconocido',
-            thumbnail: v.thumbnail.thumbnails && v.thumbnail.thumbnails.length > 0 
-                       ? v.thumbnail.thumbnails[v.thumbnail.thumbnails.length - 1].url 
-                       : `https://i.ytimg.com/vi/${v.id}/hqdefault.jpg`,
-            duration: seconds
-          };
-        });
-      } else {
-        throw new Error('youtube-search-api no devolvió resultados.');
-      }
-    }
-    
-    if (results.length === 0) {
-      return res.json([]);
-    }
-
+    const results = await searchInvidious(query);
     res.json(results);
   } catch (err) {
     const errorMsg = err && err.message ? err.message : String(err);
-    console.error(`[ERROR] Búsqueda fallida para "${query}":`, errorMsg, err);
+    console.error(`[ERROR] Búsqueda fallida para "${query}":`, errorMsg);
     res.status(500).json({ error: errorMsg });
   }
 });
