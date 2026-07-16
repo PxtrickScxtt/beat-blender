@@ -224,6 +224,15 @@ export class MixDeck implements OnDestroy {
     a.download = fileName;
     a.click();
     window.URL.revokeObjectURL(url);
+    
+    // Google Ads Conversion Event
+    if (typeof (window as any).gtag === 'function') {
+      (window as any).gtag('event', 'conversion', {
+        'send_to': 'AW-18326827328/m6W4CIXIqNEcEMDi9KJE',
+        'value': 1.0,
+        'currency': 'PEN'
+      });
+    }
   }
 
   /**
